@@ -75,6 +75,10 @@ if (feature('ABLATION_BASELINE') && process.env.CLAUDE_CODE_ABLATION_BASELINE) {
  */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
+  {
+    const { learningLog } = await import('../utils/learningLog.js');
+    learningLog('cli.startup', { argv: args.join(' ') });
+  }
 
   // Fast-path for --version/-v: zero module loading needed
   if (args.length === 1 && (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')) {
@@ -352,10 +356,13 @@ async function main(): Promise<void> {
   // No special flags detected, load and run the full CLI
   const { startCapturingEarlyInput } = await import('../utils/earlyInput.js');
   startCapturingEarlyInput();
+  const { learningLog } = await import('../utils/learningLog.js');
+  learningLog('cli.load_main_module');
   profileCheckpoint('cli_before_main_import');
   const { main: cliMain } = await import('../main.jsx');
   profileCheckpoint('cli_after_main_import');
   await cliMain();
+  learningLog('cli.main_complete');
   profileCheckpoint('cli_after_main_complete');
 }
 

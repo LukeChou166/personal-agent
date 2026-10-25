@@ -432,6 +432,7 @@ import { useOfficialMarketplaceNotification } from 'src/hooks/useOfficialMarketp
 import { usePromptsFromClaudeInChrome } from 'src/hooks/usePromptsFromClaudeInChrome.js';
 import { getTipToShowOnSpinner, recordShownTip } from 'src/services/tips/tipScheduler.js';
 import type { Theme } from 'src/utils/theme.js';
+import { learningLog } from 'src/utils/learningLog.js';
 import {
   checkAndDisableAutoModeIfNeeded,
   useKickOffCheckAndDisableAutoModeIfNeeded,
@@ -828,6 +829,37 @@ function isForkBoilerplateMessage(message: MessageType): boolean {
   return message.message.content.some(isForkBoilerplateTextBlock);
 }
 
+/**
+ * learning 日志：把 query() yield 出来的事件转成一行日志。
+ * 只记录 assistant 消息与 message_start / message_stop，避免每个 text delta 打一行。
+ */
+function logLearningQueryEvent(event: unknown): void {
+  const record = event as unknown as Record<string, unknown>;
+  if (record.type === 'stream_event') {
+    const inner = record.event as Record<string, unknown> | undefined;
+    if (inner?.type === 'message_start' || inner?.type === 'message_stop') {
+      learningLog('repl.stream', { sse: inner.type, ttftMs: record.ttftMs });
+    }
+    return;
+  }
+  if (record.type === 'assistant') {
+    const message = record.message as Record<string, unknown> | undefined;
+    const content = message?.content;
+    const blocks = Array.isArray(content) ? (content as Array<Record<string, unknown>>) : [];
+    learningLog('repl.assistant_message', {
+      stopReason: message?.stop_reason,
+      textChars:
+        typeof content === 'string'
+          ? content.length
+          : blocks.reduce(
+              (sum, block) => sum + (block.type === 'text' && typeof block.text === 'string' ? block.text.length : 0),
+              0,
+            ),
+      toolUses: blocks.filter(block => block.type === 'tool_use').length,
+    });
+  }
+}
+
 export function REPL({
   commands: initialCommands,
   debug,
@@ -871,6 +903,7 @@ export function REPL({
   // Log REPL mount/unmount lifecycle
   useEffect(() => {
     logForDebugging(`[REPL:mount] REPL mounted, disabled=${disabled}`);
+    learningLog('repl.mount', { disabled });
     return () => logForDebugging(`[REPL:unmount] REPL unmounting`);
   }, [disabled]);
 
@@ -3341,6 +3374,13 @@ export function REPL({
       mainLoopModelParam: string,
       effort?: EffortValue,
     ) => {
+      learningLog('repl.on_query', {
+        model: mainLoopModelParam,
+        messages: messagesIncludingNewMessages.length,
+        newMessages: newMessages.length,
+        shouldQuery,
+        additionalAllowedTools: additionalAllowedTools.length,
+      });
       // Prepare IDE integration for new prompt. Read mcpClients fresh from
       // store — useManageMCPConnections may have populated it since the
       // render that captured this closure (same pattern as computeTools).
@@ -3448,6 +3488,9 @@ export function REPL({
         abortController,
         mainLoopModelParam,
       );
+      learningLog('repl.on_query.tool_use_context', {
+        toolUseContext,
+      });
       // getToolUseContext reads tools/mcpClients fresh from store.getState()
       // (via computeTools/mergeClients). Use those rather than the closure-
       // captured `tools`/`mcpClients` — useManageMCPConnections may have
@@ -3505,10 +3548,21 @@ export function REPL({
       });
       toolUseContext.renderedSystemPrompt = systemPrompt;
 
+      learningLog('repl.context_ready', {
+        systemPromptChars: systemPrompt.join('\n').length,
+        toolCount: toolUseContext.options.tools.length,
+      });
+
       queryCheckpoint('query_query_start');
       resetTurnHookDuration();
       resetTurnToolDuration();
       resetTurnClassifierDuration();
+
+      learningLog('repl.query_start', {
+        messages: messagesIncludingNewMessages.length,
+        toolCount: toolUseContext.options.tools.length,
+        querySource: getQuerySourceForREPL(),
+      });
 
       for await (const event of query({
         messages: messagesIncludingNewMessages,
@@ -3519,8 +3573,11 @@ export function REPL({
         toolUseContext,
         querySource: getQuerySourceForREPL(),
       })) {
+        logLearningQueryEvent(event);
         onQueryEvent(event);
       }
+
+      learningLog('repl.query_end');
 
       if (feature('BUDDY') && typeof (globalThis as Record<string, unknown>).fireCompanionObserver === 'function') {
         const _fireCompanionObserver = (globalThis as Record<string, unknown>).fireCompanionObserver as (
@@ -3694,6 +3751,7 @@ export function REPL({
         }
 
         try {
+          learningLog('repl.onQuery mainLoopModelParam');
           await onQueryImpl(
             latestMessages,
             newMessages,
@@ -3978,6 +4036,12 @@ export function REPL({
       },
       options?: { fromKeybinding?: boolean },
     ) => {
+      learningLog('repl.submit', {
+        input,
+        inputLength: input.length,
+        isSlashCommand: input.trim().startsWith('/'),
+        fromKeybinding: !!options?.fromKeybinding,
+      });
       // Re-pin scroll to bottom on submit so the user always sees the new
       // exchange (matches OpenCode's auto-scroll behavior).
       repinScroll();
@@ -4472,6 +4536,7 @@ export function REPL({
       } else {
         injectUserMessageToTeammate(task.id, input, undefined, setAppState);
       }
+      learningLog('repl.onAgentSubmit');
       setInputValue('');
       helpers.setCursorOffset(0);
       helpers.clearBuffer();

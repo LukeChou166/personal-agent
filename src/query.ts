@@ -45,6 +45,7 @@ import {
   isPromptTooLongMessage,
 } from './services/api/errors.js'
 import { logAntError, logForDebugging } from './utils/debug.js'
+import { learningLog } from './utils/learningLog.js'
 import {
   createUserMessage,
   createUserInterruptionMessage,
@@ -286,6 +287,13 @@ export async function* query(
   const consumedCommandUuids: string[] = []
   const consumedAutonomyCommands: QueuedCommand[] = []
 
+  learningLog('query.start', {
+    messageCount: params.messages.length,
+    querySource: params.querySource,
+    model: params.toolUseContext.options.mainLoopModel,
+    toolCount: params.toolUseContext.options.tools.length,
+  })
+
   // Create Langfuse trace for this query turn (no-op if not configured).
   // When called as a sub-agent, langfuseTrace is already set by runAgent()
   // — reuse it instead of creating an independent trace.
@@ -327,6 +335,12 @@ export async function* query(
     thrownError = error
     throw error
   } finally {
+    learningLog('query.outcome', {
+      didThrow,
+      reason: terminal?.reason,
+      consumedCommands: consumedCommandUuids.length,
+    })
+
     await finalizeAutonomyCommandsForTurn({
       commands: consumedAutonomyCommands,
       outcome: getAutonomyTurnOutcome({
@@ -414,7 +428,13 @@ async function* queryLoop(
     skipCacheWrite,
   } = params
   const deps = params.deps ?? productionDeps()
-
+  learningLog('query.systemPrompt', {
+    systemPrompt,
+    userContext,
+    systemContext,
+    maxTurns,
+    fallbackModel,
+  })
   // Mutable cross-iteration state. The loop body destructures this at the top
   // of each iteration so reads stay bare-name (`messages`, `toolUseContext`).
   // Continue sites write `state = { ... }` instead of 9 separate assignments.
@@ -446,7 +466,7 @@ async function* queryLoop(
   // Snapshot immutable env/statsig/session state once at entry. See QueryConfig
   // for what's included and why feature() gates are intentionally excluded.
   const config = buildQueryConfig()
-
+  learningLog('query.config', config)
   // Fired once per user turn — the prompt is invariant across loop iterations,
   // so per-iteration firing would ask sideQuery the same question N times.
   // Consume point polls settledAt (never blocks). `using` disposes on all
@@ -462,6 +482,7 @@ async function* queryLoop(
     // is reassigned within an iteration (queryTracking, messages updates);
     // the rest are read-only between continue sites.
     let { toolUseContext } = state
+    learningLog('query.toolUseContext', { toolUseContext })
     const {
       messages,
       autoCompactTracking,
@@ -521,7 +542,7 @@ async function* queryLoop(
     }
 
     let messagesForQuery = getMessagesAfterCompactBoundary(messages)
-
+    learningLog('query.messagesForQuery', { messagesForQuery })
     // Release toolUseResult payloads from previous turns — the next API call
     // only needs message.message.content (tool_result blocks), not the raw
     // output object. This prevents unbounded memory growth in long sessions
@@ -649,6 +670,7 @@ async function* queryLoop(
     )
 
     queryCheckpoint('query_autocompact_start')
+    learningLog('query.query_autocompact_start')
     const { compactionResult, consecutiveFailures } = await deps.autocompact(
       messagesForQuery,
       toolUseContext,
@@ -663,6 +685,7 @@ async function* queryLoop(
       tracking,
       snipTokensFreed,
     )
+    learningLog('query.query_autocompact_end')
     queryCheckpoint('query_autocompact_end')
 
     if (compactionResult) {
@@ -896,6 +919,12 @@ async function* queryLoop(
         try {
           let streamingFallbackOccured = false
           queryCheckpoint('query_api_streaming_start')
+          learningLog('query.call_model', {
+            model: currentModel,
+            messages: messagesForQuery.length,
+            tools: toolUseContext.options.tools.length,
+            maxOutputTokensOverride,
+          })
           for await (const message of deps.callModel({
             messages: prependUserContext(messagesForQuery, userContext),
             systemPrompt: fullSystemPrompt,
@@ -1651,6 +1680,10 @@ async function* queryLoop(
     let updatedToolUseContext = toolUseContext
 
     queryCheckpoint('query_tool_execution_start')
+    learningLog('query.tool_exec', {
+      tools: toolUseBlocks.map(block => block.name),
+      streaming: !!streamingToolExecutor,
+    })
 
     if (streamingToolExecutor) {
       logEvent('tengu_streaming_tool_execution_used', {
@@ -1695,6 +1728,10 @@ async function* queryLoop(
         }
       }
     }
+    learningLog('query.tool_results', {
+      resultCount: toolResults.length,
+      toolUseCount: toolUseBlocks.length,
+    })
     queryCheckpoint('query_tool_execution_end')
 
     // Generate tool use summary after tool batch completes — passed to next recursive call

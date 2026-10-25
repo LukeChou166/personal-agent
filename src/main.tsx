@@ -279,6 +279,7 @@ import { errorMessage, getErrnoCode, isENOENT, TeleportOperationError, toError }
 import { getFsImplementation, safeResolvePath } from 'src/utils/fsOperations.js';
 import { gracefulShutdown, gracefulShutdownSync } from 'src/utils/gracefulShutdown.js';
 import { setAllHookEventsEnabled } from 'src/utils/hooks/hookEvents.js';
+import { learningLog } from 'src/utils/learningLog.js';
 import { refreshModelCapabilities } from 'src/utils/model/modelCapabilities.js';
 import { peekForStdinData, writeToStderr } from 'src/utils/process.js';
 import { setCwd } from 'src/utils/Shell.js';
@@ -777,7 +778,13 @@ export async function main() {
   // Check for cc:// or cc+unix:// URL in argv — rewrite so the main command
   // handles it, giving the full interactive TUI instead of a stripped-down subcommand.
   // For headless (-p), we rewrite to the internal `open` subcommand.
+  // NOTE: feature() is a Bun compile-time directive — it is only legal
+  // directly inside an `if` condition or ternary condition. Reading it into a
+  // variable or an object literal is a parse error, hence the emit-after-enter
+  // pattern below rather than passing `enabled: feature(...)`.
+  learningLog('main.feature', { feature: 'DIRECT_CONNECT' });
   if (feature('DIRECT_CONNECT')) {
+    learningLog('main.feature.DIRECT_CONNECT', { enabled: true });
     const rawCliArgs = process.argv.slice(2);
     const ccIdx = rawCliArgs.findIndex(a => a.startsWith('cc://') || a.startsWith('cc+unix://'));
     if (ccIdx !== -1 && _pendingConnect) {
@@ -811,7 +818,9 @@ export async function main() {
   // Handle deep link URIs early — this is invoked by the OS protocol handler
   // and should bail out before full init since it only needs to parse the URI
   // and open a terminal.
+  learningLog('main.feature', { feature: 'LODESTONE' });
   if (feature('LODESTONE')) {
+    learningLog('main.feature.LODESTONE', { enabled: true });
     const handleUriIdx = process.argv.indexOf('--handle-uri');
     if (handleUriIdx !== -1 && process.argv[handleUriIdx + 1]) {
       const { enableConfigs } = await import('./utils/config.js');
@@ -841,7 +850,9 @@ export async function main() {
   // `claude -p "explain assistant"`. Root-flag-before-subcommand
   // (e.g. `--debug assistant`) falls through to the stub, which
   // prints usage.
+  // learningLog('main.feature', { feature: 'KAIROS' });
   if (feature('KAIROS') && _pendingAssistantChat) {
+    learningLog('main.feature.KAIROS', { enabled: true, hasPendingAssistantChat: true });
     const rawArgs = process.argv.slice(2);
     if (rawArgs[0] === 'assistant') {
       const nextArg = rawArgs[1];
@@ -975,6 +986,13 @@ export async function main() {
 
   // Initialize entrypoint based on mode - needs to be set before any event is logged
   initializeEntrypoint(isNonInteractive);
+  learningLog('main.session_mode', {
+    isInteractive,
+    hasPrintFlag,
+    hasInitOnlyFlag,
+    hasSdkUrl,
+    isTTY: !!process.stdout.isTTY,
+  });
 
   // Determine client type
   const clientType = (() => {
@@ -995,9 +1013,11 @@ export async function main() {
 
     return 'cli';
   })();
+  learningLog('main.client_type', { clientType });
   setClientType(clientType);
 
   const previewFormat = process.env.CLAUDE_CODE_QUESTION_PREVIEW_FORMAT;
+  learningLog('main.previewFormat', { previewFormat });
   if (previewFormat === 'markdown' || previewFormat === 'html') {
     setQuestionPreviewFormat(previewFormat);
   } else if (
@@ -1433,6 +1453,11 @@ async function run(): Promise<CommanderCommand> {
     )
     .action(async (prompt, options) => {
       profileCheckpoint('action_handler_start');
+      learningLog('main.action', {
+        model: (options as { model?: string }).model,
+        hasPrompt: !!prompt,
+        promptLength: typeof prompt === 'string' ? prompt.length : undefined,
+      });
 
       // --bare = one-switch minimal mode. Sets SIMPLE so all the existing
       // gates fire (CLAUDE.md, skills, hooks inside executeHooks, agent
@@ -2617,8 +2642,9 @@ async function run(): Promise<CommanderCommand> {
       // Compute resolved model for hooks (use user-specified model at launch)
       setInitialMainLoopModel(getUserSpecifiedModelSetting() || null);
       const initialMainLoopModel = getInitialMainLoopModel();
+      learningLog('main.resolvedInitialModel', { initialMainLoopModel, defualtModel: getDefaultMainLoopModel() });
       const resolvedInitialModel = parseUserSpecifiedModel(initialMainLoopModel ?? getDefaultMainLoopModel());
-
+      learningLog('main.resolvedInitialModel', { resolvedInitialModel });
       let advisorModel: string | undefined;
       if (isAdvisorEnabled()) {
         const advisorOption = canUserConfigureAdvisor() ? (options as { advisor?: string }).advisor : undefined;
@@ -2747,6 +2773,7 @@ async function run(): Promise<CommanderCommand> {
 
       // Show setup screens after commands are loaded
       if (!isNonInteractiveSession) {
+        learningLog('main.enter_repl');
         const ctx = getRenderContext(false);
         getFpsMetrics = ctx.getFpsMetrics;
         stats = ctx.stats;
@@ -2757,6 +2784,7 @@ async function run(): Promise<CommanderCommand> {
 
         const { createRoot } = await import('@anthropic/ink');
         root = await createRoot(ctx.renderOptions);
+        learningLog('main.ink_root_ready');
 
         // Log startup time now, before any blocking dialog renders. Logging
         // from REPL's first render (the old location) included however long
@@ -2767,6 +2795,7 @@ async function run(): Promise<CommanderCommand> {
           durationMs: Math.round(process.uptime() * 1000),
         });
 
+        learningLog('main.setup_screens_start');
         logForDebugging('[STARTUP] Running showSetupScreens()...');
         const setupScreensStart = Date.now();
         const onboardingShown = await showSetupScreens(
@@ -2778,6 +2807,10 @@ async function run(): Promise<CommanderCommand> {
           devChannels,
         );
         logForDebugging(`[STARTUP] showSetupScreens() completed in ${Date.now() - setupScreensStart}ms`);
+        learningLog('main.setup_screens_end', {
+          onboardingShown,
+          durationMs: Date.now() - setupScreensStart,
+        });
 
         // Now that trust is established and GrowthBook has auth headers,
         // resolve the --remote-control / --rc entitlement gate.
@@ -3707,6 +3740,7 @@ async function run(): Promise<CommanderCommand> {
           });
           resumeSucceeded = true;
 
+          learningLog('main.launch_repl-1', { branch: 'resume_session' });
           await launchRepl(
             root,
             {
@@ -3761,6 +3795,7 @@ async function run(): Promise<CommanderCommand> {
           'info',
         );
 
+        learningLog('main.launch_repl-2', { branch: 'direct_connect' });
         await launchRepl(
           root,
           { getFpsMetrics, stats, initialState },
@@ -3839,6 +3874,10 @@ async function run(): Promise<CommanderCommand> {
           'info',
         );
 
+        // NOTE: renderAndRun awaits root.waitUntilExit(), so this call only
+        // returns after the user leaves the REPL. Anything logged after it is
+        // effectively post-session.
+        learningLog('main.launch_repl-3', { branch: 'ssh' });
         await launchRepl(
           root,
           { getFpsMetrics, stats, initialState },
@@ -3862,6 +3901,7 @@ async function run(): Promise<CommanderCommand> {
         _pendingAssistantChat &&
         (_pendingAssistantChat.sessionId || _pendingAssistantChat.discover)
       ) {
+        learningLog('main.KAIROS');
         // `claude assistant [sessionId]` — REPL as a pure viewer client
         // of a remote assistant session. The agentic loop runs remotely; this
         // process streams live events and POSTs messages. History is lazy-
@@ -3961,6 +4001,7 @@ async function run(): Promise<CommanderCommand> {
         };
 
         const remoteCommands = filterCommandsForRemoteMode(commands);
+        learningLog('main.launch_repl-4', { branch: 'assistant' });
         await launchRepl(
           root,
           {
@@ -4132,6 +4173,7 @@ async function run(): Promise<CommanderCommand> {
           // Pre-filter commands to only include remote-safe ones.
           // CCR's init response may further refine the list (via handleRemoteInit in REPL).
           const remoteCommands = filterCommandsForRemoteMode(commands);
+          learningLog('main.launch_repl-6', { branch: 'remote_control' });
           await launchRepl(
             root,
             {
@@ -4368,6 +4410,7 @@ async function run(): Promise<CommanderCommand> {
           maybeActivateProactive(options);
           maybeActivateBrief(options);
 
+          learningLog('main.launch_repl', { branch: 'resume_data' });
           await launchRepl(
             root,
             {
@@ -4446,6 +4489,8 @@ async function run(): Promise<CommanderCommand> {
             ? hookMessages
             : undefined;
 
+        learningLog('main.launch_repl', { branch: 'default' });
+        learningLog('main.initialState.mainLoopModel', { mainLoopModel: initialState.mainLoopModel });
         await launchRepl(
           root,
           { getFpsMetrics, stats, initialState },

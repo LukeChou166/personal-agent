@@ -178,6 +178,7 @@ import {
 } from 'src/utils/fastMode.js'
 import { returnValue } from 'src/utils/generators.js'
 import { headlessProfilerCheckpoint } from 'src/utils/headlessProfiler.js'
+import { learningLog } from 'src/utils/learningLog.js'
 import { isMcpInstructionsDeltaEnabled } from 'src/utils/mcpInstructionsDelta.js'
 import { calculateUSDCost } from 'src/utils/modelCost.js'
 import { endQueryProfile, queryCheckpoint } from 'src/utils/queryProfiler.js'
@@ -1056,6 +1057,14 @@ async function* queryModel(
   StreamEvent | AssistantMessage | SystemAPIErrorMessage,
   void
 > {
+  learningLog('api.query_model', {
+    model: options.model,
+    provider: getAPIProvider(),
+    querySource: options.querySource,
+    messages: messages.length,
+    tools: tools.length,
+  })
+
   // Check cheap conditions first — the off-switch await blocks on GrowthBook
   // init (~10ms). For non-Opus models (haiku, sonnet) this skips the await
   // entirely. Subscribers don't hit this path at all.
@@ -1891,6 +1900,19 @@ async function* queryModel(
         queryCheckpoint('query_client_creation_end')
 
         const params = paramsFromContext(context)
+        learningLog('api.request_params', {
+          model: params.model,
+          max_tokens: params.max_tokens,
+          messages: params.messages.length,
+          systemBlocks: Array.isArray(params.system)
+            ? params.system.length
+            : undefined,
+          tools: params.tools?.length,
+          betas: Array.isArray(params.betas) ? params.betas.length : undefined,
+          temperature: params.temperature,
+          thinking: params.thinking?.type,
+          hasToolChoice: !!params.tool_choice,
+        })
         captureAPIRequest(params, options.querySource) // Capture for bug reports
 
         maxOutputTokens = params.max_tokens
@@ -1911,6 +1933,12 @@ async function* queryModel(
             ? randomUUID()
             : undefined
 
+        learningLog('api.http_request_sent', {
+          model: params.model,
+          attempt,
+          messages: params.messages.length,
+        })
+
         // Use raw stream instead of BetaMessageStream to avoid O(n²) partial JSON parsing
         // BetaMessageStream calls partialParse() on every input_json_delta, which we don't need
         // since we handle tool input accumulation ourselves
@@ -1928,6 +1956,11 @@ async function* queryModel(
         queryCheckpoint('query_response_headers_received')
         streamRequestId = result.request_id
         streamResponse = result.response
+        learningLog('api.response_headers', {
+          status: streamResponse.status,
+          requestId: streamRequestId,
+          model: params.model,
+        })
         return result.data
       },
       {
@@ -2028,6 +2061,8 @@ async function* queryModel(
     try {
       // stream in and accumulate state
       let isFirstChunk = true
+      // learning 日志：delta 只计数，在 message_stop 汇总输出，避免每 token 一行
+      let deltaCount = 0
       let lastEventTime: number | null = null // Set after first chunk to avoid measuring TTFB as a stall
       const STALL_THRESHOLD_MS = 30_000 // 30 seconds
       let totalStallTime = 0
@@ -2063,6 +2098,10 @@ async function* queryModel(
         lastEventTime = now
 
         if (isFirstChunk) {
+          learningLog('api.first_chunk', {
+            model: options.model,
+            requestId: streamRequestId,
+          })
           logForDebugging('Stream started - received first chunk')
           queryCheckpoint('query_first_chunk_received')
           if (!options.agentId) {
@@ -2077,6 +2116,16 @@ async function* queryModel(
             partialMessage = part.message
             ttftMs = Date.now() - start
             usage = updateUsage(usage, part.message?.usage)
+            learningLog('api.message_start', {
+              ttftMs,
+              requestId: streamRequestId,
+              model: part.message.model,
+              inputTokens: part.message.usage?.input_tokens,
+              outputTokens: part.message.usage?.output_tokens,
+              cacheReadTokens: part.message.usage?.cache_read_input_tokens,
+              cacheCreationTokens:
+                part.message.usage?.cache_creation_input_tokens,
+            })
             // Capture research from message_start if available (internal only).
             // Always overwrite with the latest value.
             if (
@@ -2095,6 +2144,10 @@ async function* queryModel(
                   ...part.content_block,
                   input: '',
                 }
+                learningLog('api.tool_use', {
+                  name: part.content_block.name,
+                  id: part.content_block.id,
+                })
                 break
               case 'server_tool_use':
                 contentBlocks[part.index] = {
@@ -2148,6 +2201,7 @@ async function* queryModel(
             }
             break
           case 'content_block_delta': {
+            deltaCount++
             const contentBlock = contentBlocks[part.index]
             const delta = part.delta as typeof part.delta | ConnectorTextDelta
             if (!contentBlock) {
@@ -2313,11 +2367,32 @@ async function* queryModel(
               ...(advisorModel && { advisorModel }),
             }
             newMessages.push(m)
+            const stoppedBlock = contentBlock as unknown as Record<
+              string,
+              unknown
+            >
+            learningLog('api.content_block_stop', {
+              contentType: stoppedBlock.type,
+              chars:
+                typeof stoppedBlock.text === 'string'
+                  ? stoppedBlock.text.length
+                  : typeof stoppedBlock.thinking === 'string'
+                    ? stoppedBlock.thinking.length
+                    : undefined,
+              toolName:
+                typeof stoppedBlock.name === 'string'
+                  ? stoppedBlock.name
+                  : undefined,
+            })
             yield m
             break
           }
           case 'message_delta': {
             usage = updateUsage(usage, part.usage)
+            learningLog('api.message_delta', {
+              stopReason: part.delta.stop_reason,
+              outputTokens: part.usage?.output_tokens,
+            })
             // Capture research from message_delta if available (internal only).
             // Always overwrite with the latest value. Also write back to
             // already-yielded messages since message_delta arrives after
@@ -2402,6 +2477,7 @@ async function* queryModel(
             break
           }
           case 'message_stop':
+            learningLog('api.message_stop', { deltas: deltaCount })
             break
         }
 
@@ -2424,6 +2500,7 @@ async function* queryModel(
           streamWatchdogFiredAt !== null
             ? Math.round(performance.now() - streamWatchdogFiredAt)
             : -1
+        learningLog('api.stream_idle_abort', { exitDelayMs })
         logForDiagnosticsNoPII(
           'info',
           'cli_stream_loop_exited_after_watchdog_clean',
@@ -2664,6 +2741,11 @@ async function* queryModel(
       // Instrumentation: proves executeNonStreamingRequest was entered (vs. the
       // fallback event firing but the call itself hanging at dispatch).
       logForDiagnosticsNoPII('info', 'cli_nonstreaming_fallback_started')
+      learningLog('api.fallback_nonstreaming', {
+        model: options.model,
+        cause: streamIdleAborted ? 'watchdog' : 'other',
+        attemptNumber,
+      })
       logEvent('tengu_nonstreaming_fallback_started', {
         request_id: (streamRequestId ??
           'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,

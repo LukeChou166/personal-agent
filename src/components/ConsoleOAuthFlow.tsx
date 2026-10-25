@@ -25,6 +25,7 @@ import { CHINA_LLM_PROVIDERS, type ProviderPreset, resolveChinaProviderBaseURL }
 import { Select } from './CustomSelect/select.js';
 import { Spinner } from './Spinner.js';
 import TextInput from './TextInput.js';
+import { learningLog } from 'src/utils/learningLog.js';
 
 type Props = {
   onDone(): void;
@@ -431,6 +432,7 @@ function OAuthStatusMessage({
   setLoginWithClaudeAi,
   onDone,
 }: OAuthStatusMessageProps): React.ReactNode {
+  learningLog('ConsoleOAuthFlow.OAuthStatusMessage');
   switch (oauthStatus.state) {
     case 'idle':
       return (
@@ -1304,6 +1306,7 @@ function OAuthStatusMessage({
     }
 
     case 'china_provider_select': {
+      learningLog('ConsoleOAuthFlow.china_provider_select');
       return (
         <Box flexDirection="column" gap={1} marginTop={1}>
           <Text bold>Select China LLM Provider</Text>

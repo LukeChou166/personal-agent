@@ -13,6 +13,7 @@ import { logForDebugging } from '../../utils/debug.js'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parseFrontmatter } from '../../utils/frontmatterParser.js'
+import { learningLog } from 'src/utils/learningLog.js'
 
 /**
  * Per-session memoization to avoid re-emitting the same skill discovery /
@@ -282,7 +283,7 @@ export async function startSkillDiscoveryPrefetch(
     logForDebugging(
       `[skill-search] prefetch found ${newResults.length} skills in ${signal.durationMs}ms`,
     )
-
+    learningLog('prefetch.skill-search')
     return [
       buildDiscoveryAttachment(
         await enrichResultsForAutoLoad(newResults, toolUseContext),
