@@ -1,3 +1,6 @@
+import { learningLog } from 'src/utils/learningLog.js'
+import { renderModelName } from './model'
+
 export type ChatGPTCodexModelOption = {
   value: string
   label: string
@@ -25,6 +28,7 @@ export function resolveChatGPTCodexModelForTier(params: {
   tierOverride?: string
   taskOverride?: string
 }): string | undefined {
+  //learningLog('chatgptModels.isChatGPTAuth', {tier: params.tier, modelName: CHATGPT_CODEX_MODELS_BY_TIER[params.tier]});
   return (
     params.taskOverride ??
     params.tierOverride ??

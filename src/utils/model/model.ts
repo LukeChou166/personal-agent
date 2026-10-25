@@ -35,6 +35,8 @@ import {
   resolveChatGPTCodexModelForTier,
 } from './chatgptModels.js'
 
+import { learningLog } from 'src/utils/learningLog.js'
+
 export type ModelShortName = string
 export type ModelName = string
 export type ModelSetting = ModelName | ModelAlias | null
@@ -51,7 +53,10 @@ function getOpenAIModelForTier(
   tier: ChatGPTCodexModelTier,
 ): ModelName | undefined {
   if (provider !== 'openai') return undefined
-
+  // learningLog('model.getOpenAIModelForTier: ', {modelName: resolveChatGPTCodexModelForTier({
+  //   tier,
+  //   isChatGPTAuth: isChatGPTAuthMode(),
+  //   tierOverride: process.env[OPENAI_DEFAULT_MODEL_ENV_BY_TIER[tier]]})});
   return resolveChatGPTCodexModelForTier({
     tier,
     isChatGPTAuth: isChatGPTAuthMode(),
@@ -188,7 +193,10 @@ export function getDefaultOpusModel(): ModelName {
 export function getDefaultSonnetModel(): ModelName {
   const provider = getAPIProvider()
   const openAIModel = getOpenAIModelForTier(provider, 'sonnet')
-  if (openAIModel) return openAIModel
+  if (openAIModel) {
+    // learningLog('model.openAIModel: ', {isOpenAIModel: openAIModel, provider});
+    return openAIModel
+  }
   // For Gemini provider, check GEMINI_DEFAULT_SONNET_MODEL
   if (provider === 'gemini' && process.env.GEMINI_DEFAULT_SONNET_MODEL) {
     return process.env.GEMINI_DEFAULT_SONNET_MODEL
@@ -205,6 +213,7 @@ export function getDefaultSonnetModel(): ModelName {
   if (provider !== 'firstParty') {
     return getModelStrings().sonnet45
   }
+  // learningLog('getDefaultSonnetModel1: ', {modelName: getModelStrings().sonnet46});
   return getModelStrings().sonnet46
 }
 
@@ -271,6 +280,7 @@ export function getRuntimeMainLoopModel(params: {
 export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
   // Ants default to defaultModel from flag config, or Opus 1M if not configured
   if (process.env.USER_TYPE === 'ant') {
+    // learningLog('model.getAntModelOverrideConfig');
     return (
       (getAntModelOverrideConfig()?.defaultModel as string) ??
       getDefaultOpusModel() + '[1m]'
@@ -279,16 +289,19 @@ export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
 
   // Max users get Opus as default
   if (isMaxSubscriber()) {
+    // learningLog('model.getDefaultOpusModel');
     return getDefaultOpusModel() + (isOpus1mMergeEnabled() ? '[1m]' : '')
   }
 
   // Team Premium gets Opus (same as Max)
   if (isTeamPremiumSubscriber()) {
+    // learningLog('model.isTeamPremiumSubscriber');
     return getDefaultOpusModel() + (isOpus1mMergeEnabled() ? '[1m]' : '')
   }
 
   // PAYG (1P and 3P), Enterprise, Team Standard, and Pro get Sonnet as default
   // Note that PAYG (3P) may default to an older Sonnet model
+  // learningLog('model.getDefaultSonnetModel');
   return getDefaultSonnetModel()
 }
 
@@ -297,6 +310,7 @@ export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
  * (bypassing any user-specified values).
  */
 export function getDefaultMainLoopModel(): ModelName {
+  // learningLog('model.getDefaultMainLoopModel', {modelName: parseUserSpecifiedModel(getDefaultMainLoopModelSetting())});
   return parseUserSpecifiedModel(getDefaultMainLoopModelSetting())
 }
 

@@ -55,11 +55,20 @@ export const getRipgrepConfig = memoize((): RipgrepConfig => {
     }
   }
 
-  const rgRoot = path.resolve(__dirname, 'vendor', 'ripgrep')
-  const command =
-    process.platform === 'win32'
-      ? path.resolve(rgRoot, `${process.arch}-win32`, 'rg.exe')
-      : path.resolve(rgRoot, `${process.arch}-${process.platform}`, 'rg')
+  // The vendored binary lives in two layouts:
+  //  - bundled: <dist>/vendor/ripgrep/<arch>-<platform>/rg
+  //  - dev:     <root>/src/utils/vendor/ripgrep/<arch>-<platform>/rg
+  //    (postinstall.cjs downloads it there; build.ts copies it into dist/).
+  //    In dev mode distRoot is the project root, so the src tree must be
+  //    probed too, otherwise ripgrep looks unavailable.
+  const rgBinary = process.platform === 'win32' ? 'rg.exe' : 'rg'
+  const rgSubdir = `${process.arch}-${process.platform}`
+  const candidates = [
+    path.resolve(__dirname, 'vendor', 'ripgrep'),
+    path.resolve(__dirname, 'src', 'utils', 'vendor', 'ripgrep'),
+  ].map(root => path.resolve(root, rgSubdir, rgBinary))
+
+  const command = candidates.find(existsSync) ?? candidates[0]!
 
   return resolveBuiltinWithFallback(command)
 })

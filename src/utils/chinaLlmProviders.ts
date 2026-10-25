@@ -3,6 +3,8 @@
  * All providers are OpenAI-compatible — just swap baseURL + apiKey.
  */
 
+import { learningLog } from './learningLog'
+
 export type ProviderModel = {
   id: string
   label: string
@@ -264,6 +266,7 @@ export const CHINA_LLM_PROVIDERS: ProviderPreset[] = [
 ]
 
 export function findChinaProviderById(id: string): ProviderPreset | undefined {
+  learningLog('chinaLlmProviders.findChinaProviderById')
   return CHINA_LLM_PROVIDERS.find(p => p.id === id)
 }
 
