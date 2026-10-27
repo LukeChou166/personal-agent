@@ -16,6 +16,7 @@ import { getSettings_DEPRECATED } from 'src/utils/settings/settings.js'
 import { asSystemPrompt } from 'src/utils/systemPromptType.js'
 import { isPreapprovedHost } from './preapproved.js'
 import { makeSecondaryModelPrompt } from './prompt.js'
+import { learningLog } from 'src/utils/learningLog.js'
 
 const DEFAULT_TAVILY_EXTRACT_URL = 'https://tavily.claude-code-best.win/extract'
 
@@ -547,6 +548,7 @@ export async function applyPromptToMarkdown(
   isNonInteractiveSession: boolean,
   isPreapprovedDomain: boolean,
 ): Promise<string> {
+  learningLog('webFetchTool.claude.applyPromptToMarkdown')
   // Truncate content to avoid "Prompt is too long" errors from the secondary model
   const truncatedContent =
     markdownContent.length > MAX_MARKDOWN_LENGTH
@@ -559,6 +561,7 @@ export async function applyPromptToMarkdown(
     prompt,
     isPreapprovedDomain,
   )
+
   const assistantMessage = await queryHaiku({
     systemPrompt: asSystemPrompt([]),
     userPrompt: modelPrompt,
@@ -579,15 +582,29 @@ export async function applyPromptToMarkdown(
   }
 
   const { content } = assistantMessage.message!
-  if (content!.length > 0) {
-    const contentBlock = content![0]
-    if (
-      contentBlock &&
-      typeof contentBlock === 'object' &&
-      'text' in contentBlock
-    ) {
-      return (contentBlock as { text: string }).text
-    }
+  learningLog('web_fetch_apply_response', { content })
+  // 二级模型可能先吐 thinking / reasoning 块（qwen3.5-plus、deepseek、mimo 都会），
+  // 正文在后面的 text 块里。只看 content[0] 会把"有正文但被 thinking 挡住"
+  // 误判成"模型没回复"，回填成 "No response from model"。
+  //
+  // 注意：OpenAI 兼容层的流适配器有时会把正文的尾部 text_delta 追加到已经打开的
+  // thinking 块上（表现为 type:'thinking' 但带 text 字段、thinking 为空），
+  // 所以这里按"是否有非空 text"收集，而不是按 type 过滤，否则正文会被截断。
+  const blocks = (content ?? []) as unknown[]
+  const text = blocks
+    .filter(
+      (block): block is { text: string } =>
+        !!block &&
+        typeof block === 'object' &&
+        typeof (block as { text?: unknown }).text === 'string' &&
+        (block as { text: string }).text.trim() !== '',
+    )
+    .map(block => block.text)
+    .join('')
+    .trim()
+
+  if (text) {
+    return text
   }
   return 'No response from model'
 }

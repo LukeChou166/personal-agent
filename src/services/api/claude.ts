@@ -951,6 +951,7 @@ function getPreviousRequestIdFromMessages(
   messages: Message[],
 ): string | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
+    learningLog('claude.messages num', { i, msg: messages[i] })
     const msg = messages[i]!
     if (msg.type === 'assistant' && msg.requestId) {
       return msg.requestId as string
@@ -1102,6 +1103,7 @@ async function* queryModel(
       : options.model
 
   queryCheckpoint('query_tool_schema_build_start')
+  learningLog('claude.ts.query_tool_schema_build_start')
   const isAgenticQuery =
     options.querySource.startsWith('repl_main_thread') ||
     options.querySource.startsWith('agent:') ||
@@ -1109,7 +1111,7 @@ async function* queryModel(
     options.querySource === 'hook_agent' ||
     options.querySource === 'verification_agent'
   const betas = getMergedBetas(options.model, { isAgenticQuery })
-
+  learningLog('claude.isAgenticQuery & betas', { isAgenticQuery, betas })
   // Always send the advisor beta header when advisor is enabled, so
   // non-agentic queries (compact, side_question, extract_memories, etc.)
   // can parse advisor server_tool_use blocks already in the conversation history.
@@ -1287,7 +1289,7 @@ async function* queryModel(
   }
 
   queryCheckpoint('query_tool_schema_build_end')
-
+  learningLog('claude.ts.query_tool_schema_build_end')
   // Normalize messages before building system prompt (needed for fingerprinting)
   // Instrumentation: Track message count before normalization
   logEvent('tengu_api_before_normalize', {
@@ -1295,9 +1297,10 @@ async function* queryModel(
   })
 
   queryCheckpoint('query_message_normalization_start')
+  learningLog('claude.ts.query_message_normalization_start')
   let messagesForAPI = normalizeMessagesForAPI(messages, filteredTools)
   queryCheckpoint('query_message_normalization_end')
-
+  learningLog('claude.ts.query_message_normalization_end')
   // Model-specific post-processing: strip tool-search-specific fields if the
   // selected model doesn't support tool search.
   //
@@ -1880,6 +1883,7 @@ async function* queryModel(
 
   try {
     queryCheckpoint('query_client_creation_start')
+    learningLog('claude.ts.query_client_creation_start')
     const generator = withRetry(
       () =>
         getAnthropicClient({
@@ -1898,7 +1902,7 @@ async function* queryModel(
         // only calls getClient() again after auth errors), so the delta from
         // client_creation_start is meaningful on attempt 1.
         queryCheckpoint('query_client_creation_end')
-
+        learningLog('claude.ts.query_client_creation_end')
         const params = paramsFromContext(context)
         learningLog('api.request_params', {
           model: params.model,
@@ -1921,6 +1925,7 @@ async function* queryModel(
         // awaits until response headers arrive, so this MUST be before the await
         // or the "Network TTFB" phase measurement is wrong.
         queryCheckpoint('query_api_request_sent')
+        learningLog('claude.ts.query_api_request_sent')
         if (!options.agentId) {
           headlessProfilerCheckpoint('api_request_sent')
         }
@@ -1954,6 +1959,7 @@ async function* queryModel(
           )
           .withResponse()
         queryCheckpoint('query_response_headers_received')
+        learningLog('claude.ts.query_response_headers_received')
         streamRequestId = result.request_id
         streamResponse = result.response
         learningLog('api.response_headers', {
@@ -2104,6 +2110,7 @@ async function* queryModel(
           })
           logForDebugging('Stream started - received first chunk')
           queryCheckpoint('query_first_chunk_received')
+          learningLog('claude.ts.query_first_chunk_received')
           if (!options.agentId) {
             headlessProfilerCheckpoint('first_chunk')
           }
@@ -3488,6 +3495,7 @@ export async function queryHaiku({
   signal: AbortSignal
   options: HaikuOptions
 }): Promise<AssistantMessage> {
+  learningLog('claude.queryHaiku')
   const result = await withVCR(
     [
       createUserMessage({

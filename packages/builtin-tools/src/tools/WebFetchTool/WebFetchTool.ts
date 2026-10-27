@@ -22,6 +22,7 @@ import {
   isPreapprovedUrl,
   MAX_MARKDOWN_LENGTH,
 } from './utils.js'
+import { learningLog } from 'src/utils/learningLog.js'
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
@@ -216,7 +217,7 @@ ${DESCRIPTION}`
     // Select backend: settings.webFetchAdapter → default 'tavily'
     const settings = getSettings_DEPRECATED()
     const backend = settings.webFetchAdapter ?? 'tavily'
-
+    learningLog('WebFetchTool.call: backend', { backend })
     // Tavily path: /extract returns Markdown directly — skip turndown + queryHaiku
     if (backend === 'tavily') {
       const response = await fetchContentWithTavily(url, abortController)
@@ -283,6 +284,7 @@ Please use WebFetch again with the redirect URL.`
 
     // Check if we got a redirect to a different host
     if ('type' in response && response.type === 'redirect') {
+      learningLog('WebFetchTool.response: redirect')
       const statusText =
         response.statusCode === 301
           ? 'Moved Permanently'

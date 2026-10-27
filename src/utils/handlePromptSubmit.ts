@@ -26,6 +26,7 @@ import type { FileHistoryState } from './fileHistory.js'
 import { fileHistoryEnabled, fileHistoryMakeSnapshot } from './fileHistory.js'
 import { gracefulShutdownSync } from './gracefulShutdown.js'
 import { toError } from './errors.js'
+import { learningLog } from './learningLog.js'
 import { logError } from './log.js'
 import { enqueue } from './messageQueueManager.js'
 import { resolveSkillModelOverride } from './model/model.js'
@@ -448,7 +449,7 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
     // guard is already in dispatching (legacy queue-processor path).
     queryGuard.reserve()
     queryCheckpoint('query_process_user_input_start')
-
+    learningLog('handlePromptSubmit.ts.query_process_user_input_start')
     const newMessages: Message[] = []
     let shouldQuery = false
     let allowedTools: string[] | undefined
@@ -553,8 +554,10 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
         }
 
         queryCheckpoint('query_process_user_input_end')
+        learningLog('handlePromptSubmit.ts.query_process_user_input_end')
         if (fileHistoryEnabled()) {
           queryCheckpoint('query_file_history_snapshot_start')
+          learningLog('handlePromptSubmit.ts.query_file_history_snapshot_start')
           newMessages.filter(selectableUserMessagesFilter).forEach(message => {
             void fileHistoryMakeSnapshot(
               (updater: (prev: FileHistoryState) => FileHistoryState) => {
@@ -567,6 +570,7 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
             )
           })
           queryCheckpoint('query_file_history_snapshot_end')
+          learningLog('handlePromptSubmit.ts.query_file_history_snapshot_end')
         }
 
         if (newMessages.length) {

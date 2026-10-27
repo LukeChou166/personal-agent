@@ -1,3 +1,4 @@
+import { feature } from 'bun:bundle'
 import type Anthropic from '@anthropic-ai/sdk'
 import type {
   BetaTool,
@@ -459,12 +460,14 @@ export function prependUserContext(
   const result: Message[] = []
 
   if (claudeMd) {
-    result.push(
-      createUserMessage({
-        content: `<project-instructions>\n${claudeMd}\n</project-instructions>\n`,
-        isMeta: true,
-      }),
-    )
+    if (feature('PROJECT_INSTRUCTIONS')) {
+      result.push(
+        createUserMessage({
+          content: `<project-instructions>\n${claudeMd}\n</project-instructions>\n`,
+          isMeta: true,
+        }),
+      )
+    }
   }
 
   const restEntries = Object.entries(rest)

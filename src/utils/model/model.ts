@@ -64,8 +64,35 @@ function getOpenAIModelForTier(
   })
 }
 
+/**
+ * 二级（小/快）模型名 —— OpenAI 兼容 provider 专用。
+ *
+ * 模型名只能来自 ~/.claude/settings.json 的 `env` 配置（由
+ * applySafeConfigEnvironmentVariables() 注入 process.env）：
+ *   1. OPENAI_SMALL_FAST_MODEL    —— 显式的"小模型"覆盖
+ *   2. OPENAI_DEFAULT_HAIKU_MODEL —— haiku 档模型（当前配置：qwen3.5-plus）
+ *
+ * 绝不能回落到 Anthropic 内置名（claude-haiku-4-5-*）：那会把 Anthropic 的
+ * 模型 ID 发到第三方 OpenAI 端点，导致报错或空响应 —— WebFetch 的二级总结
+ * 就会拿到空内容并回填成 "No response from model"。
+ *
+ * 抽成纯函数是为了可测：直接 import model.ts 会拉起 auth/settings 等重依赖链，
+ * 在 bun test 里容易受进程级 mock 污染（同 providers.test.ts 的做法）。
+ */
+export function resolveOpenAISmallFastModel(
+  env: Record<string, string | undefined> = process.env,
+): ModelName | undefined {
+  return (
+    env.OPENAI_SMALL_FAST_MODEL || env.OPENAI_DEFAULT_HAIKU_MODEL || undefined
+  )
+}
+
 export function getSmallFastModel(): ModelName {
   const provider = getAPIProvider()
+  learningLog('model.getSmallFastModel: ', {
+    provider,
+    isChatGPTAuth: isChatGPTAuthMode(),
+  })
   if (provider === 'openai' && isChatGPTAuthMode()) {
     const chatGPTModel = resolveChatGPTCodexModelForTier({
       tier: 'haiku',
@@ -75,9 +102,11 @@ export function getSmallFastModel(): ModelName {
     })
     if (chatGPTModel) return chatGPTModel
   }
-  // Provider-specific small fast model
-  if (provider === 'openai' && process.env.OPENAI_SMALL_FAST_MODEL) {
-    return process.env.OPENAI_SMALL_FAST_MODEL
+  // OpenAI 兼容端点（settings.json 的 modelType: "openai"）：模型名只认
+  // settings.json env 里配置的值，不要回落到 Anthropic 内置模型名。
+  if (provider === 'openai') {
+    const configured = resolveOpenAISmallFastModel()
+    if (configured) return configured
   }
   if (provider === 'gemini' && process.env.GEMINI_SMALL_FAST_MODEL) {
     return process.env.GEMINI_SMALL_FAST_MODEL
