@@ -28,6 +28,7 @@
  */
 
 import { logForDebugging } from './debug.js'
+import { learningLog } from './learningLog.js'
 import { isEnvTruthy } from './envUtils.js'
 import { formatMs, formatTimelineLine, getPerformance } from './profilerBase.js'
 
@@ -61,6 +62,7 @@ export function startQueryProfile(): void {
 
   // Record the start checkpoint
   queryCheckpoint('query_user_input_received')
+  learningLog('queryProfiler.ts.query_user_input_received')
 }
 
 /**
@@ -90,6 +92,7 @@ export function endQueryProfile(): void {
   if (!ENABLED) return
 
   queryCheckpoint('query_profile_end')
+  learningLog('queryProfiler.ts.query_profile_end')
 }
 
 /**

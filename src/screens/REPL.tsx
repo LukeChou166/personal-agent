@@ -3510,6 +3510,7 @@ export function REPL({
       }
 
       queryCheckpoint('query_context_loading_start');
+      learningLog('REPL.tsx.query_context_loading_start');
       const [, , defaultSystemPrompt, baseUserContext, systemContext] = await Promise.all([
         // IMPORTANT: do this after setMessages() above, to avoid UI jank
         undefined,
@@ -3538,7 +3539,7 @@ export function REPL({
           : {}),
       };
       queryCheckpoint('query_context_loading_end');
-
+      learningLog('REPL.tsx.query_context_loading_end');
       const systemPrompt = buildEffectiveSystemPrompt({
         mainThreadAgentDefinition,
         toolUseContext,
@@ -3554,6 +3555,7 @@ export function REPL({
       });
 
       queryCheckpoint('query_query_start');
+      learningLog('REPL.tsx.query_query_start');
       resetTurnHookDuration();
       resetTurnToolDuration();
       resetTurnClassifierDuration();
@@ -3594,7 +3596,7 @@ export function REPL({
       }
 
       queryCheckpoint('query_end');
-
+      learningLog('REPL.tsx.query_end');
       if (feature('UDS_INBOX')) {
         if (abortController.signal.aborted) {
           pipeReturnHadErrorRef.current = true;

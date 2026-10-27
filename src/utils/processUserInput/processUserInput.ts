@@ -39,6 +39,7 @@ import {
 import type { PastedContent } from '../config.js'
 import type { EffortValue } from '../effort.js'
 import { toArray } from '../generators.js'
+import { learningLog } from '../learningLog.js'
 import {
   executeUserPromptSubmitHooks,
   getUserPromptSubmitHookBlockingMessage,
@@ -154,7 +155,7 @@ export async function processUserInput({
   }
 
   queryCheckpoint('query_process_user_input_base_start')
-
+  learningLog('processUserInput.ts.query_process_user_input_base_start')
   const appState = context.getAppState()
 
   const result = await processUserInputBase(
@@ -178,13 +179,14 @@ export async function processUserInput({
     autonomy,
   )
   queryCheckpoint('query_process_user_input_base_end')
-
+  learningLog('processUserInput.ts.query_process_user_input_base_end')
   if (!result.shouldQuery) {
     return result
   }
 
   // Execute UserPromptSubmit hooks and handle blocking
   queryCheckpoint('query_hooks_start')
+  learningLog('processUserInput.ts.query_hooks_start')
   const inputMessage = getContentText(input) || ''
 
   for await (const hookResult of executeUserPromptSubmitHooks(
@@ -272,7 +274,7 @@ export async function processUserInput({
     }
   }
   queryCheckpoint('query_hooks_end')
-
+  learningLog('processUserInput.ts.query_hooks_end')
   // Happy path: onQuery will clear userInputOnProcessing via startTransition
   // so it resolves in the same frame as deferredMessages (no flicker gap).
   // Error paths are handled by handlePromptSubmit's finally block.
@@ -326,6 +328,7 @@ async function processUserInputBase(
     inputString = input
   } else if (input.length > 0) {
     queryCheckpoint('query_image_processing_start')
+    learningLog('processUserInput.ts.query_image_processing_start')
     const processedBlocks: ContentBlockParam[] = []
     for (const block of input) {
       if (block.type === 'image') {
@@ -344,6 +347,7 @@ async function processUserInputBase(
     }
     normalizedInput = processedBlocks
     queryCheckpoint('query_image_processing_end')
+    learningLog('processUserInput.ts.query_image_processing_end')
     // Extract the input string from the last content block if it is text,
     // and keep track of the preceding content blocks
     const lastBlock = processedBlocks[processedBlocks.length - 1]
@@ -374,6 +378,7 @@ async function processUserInputBase(
 
   // Resize pasted images to ensure they fit within API limits (parallel processing)
   queryCheckpoint('query_pasted_image_processing_start')
+  learningLog('processUserInput.ts.query_pasted_image_processing_start')
   const imageProcessingResults = await Promise.all(
     imageContents.map(async pastedImage => {
       const imageBlock: ImageBlockParam = {
@@ -429,7 +434,7 @@ async function processUserInputBase(
     imageContentBlocks.push(resized.block)
   }
   queryCheckpoint('query_pasted_image_processing_end')
-
+  learningLog('processUserInput.ts.query_pasted_image_processing_end')
   // Bridge-safe slash command override: mobile/web clients set bridgeOrigin
   // with skipSlashCommands still true (defense-in-depth against exit words and
   // immediate-command fast paths). Resolve the command here — if it passes
@@ -514,6 +519,7 @@ async function processUserInputBase(
     (mode !== 'prompt' || effectiveSkipSlash || !inputString.startsWith('/'))
 
   queryCheckpoint('query_attachment_loading_start')
+  learningLog('processUserInput.ts.query_attachment_loading_start')
   const attachmentMessages = shouldExtractAttachments
     ? await toArray(
         getAttachmentMessages(
@@ -527,7 +533,7 @@ async function processUserInputBase(
       )
     : []
   queryCheckpoint('query_attachment_loading_end')
-
+  learningLog('processUserInput.ts.query_attachment_loading_end')
   // Bash commands
   if (inputString !== null && mode === 'bash') {
     const { processBashCommand } = await import('./processBashCommand.js')
