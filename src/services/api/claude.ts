@@ -3495,7 +3495,7 @@ export async function queryHaiku({
   signal: AbortSignal
   options: HaikuOptions
 }): Promise<AssistantMessage> {
-  learningLog('claude.queryHaiku')
+  learningLog('claude.queryHaiku', { userPrompt, systemPrompt })
   const result = await withVCR(
     [
       createUserMessage({
