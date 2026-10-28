@@ -1150,34 +1150,6 @@ async function* queryLoop(
             }
           }
           queryCheckpoint('query_api_streaming_end')
-
-          // Yield deferred microcompact boundary message using actual API-reported
-          // token deletion count instead of client-side estimates.
-          // Entire block gated behind feature() so the excluded string
-          // is eliminated from external builds.
-          if (feature('CACHED_MICROCOMPACT') && pendingCacheEdits) {
-            const lastAssistant = assistantMessages.at(-1)
-            // The API field is cumulative/sticky across requests, so we
-            // subtract the baseline captured before this request to get the delta.
-            const usage = lastAssistant?.message.usage
-            const cumulativeDeleted = usage
-              ? ((usage as unknown as Record<string, number>)
-                  .cache_deleted_input_tokens ?? 0)
-              : 0
-            const deletedTokens = Math.max(
-              0,
-              cumulativeDeleted - pendingCacheEdits.baselineCacheDeletedTokens,
-            )
-            if (deletedTokens > 0) {
-              yield createMicrocompactBoundaryMessage(
-                pendingCacheEdits.trigger,
-                0,
-                deletedTokens,
-                pendingCacheEdits.deletedToolIds,
-                [],
-              )
-            }
-          }
         } catch (innerError) {
           if (innerError instanceof FallbackTriggeredError && fallbackModel) {
             // Fallback was triggered - switch model and retry
