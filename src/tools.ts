@@ -170,6 +170,7 @@ import {
   REPL_ONLY_TOOLS,
   isReplModeEnabled,
 } from '@claude-code-best/builtin-tools/tools/REPLTool/constants.js'
+import { learningLog } from './utils/learningLog.js'
 export { REPL_ONLY_TOOLS }
 /* eslint-disable @typescript-eslint/no-require-imports */
 const getPowerShellTool = () => {
@@ -338,10 +339,10 @@ export const getTools = (permissionContext: ToolPermissionContext): Tools => {
   ])
 
   const tools = getAllBaseTools().filter(tool => !specialTools.has(tool.name))
-
+  learningLog('tools.beforeFilter', { len: tools.length })
   // Filter out tools that are denied by the deny rules
   let allowedTools = filterToolsByDenyRules(tools, permissionContext)
-
+  learningLog('tools.afterFilter', { len: tools.length })
   // When REPL mode is enabled, hide primitive tools from direct use.
   // They're still accessible inside REPL via the VM context.
   if (isReplModeEnabled()) {
@@ -356,6 +357,7 @@ export const getTools = (permissionContext: ToolPermissionContext): Tools => {
   }
 
   const isEnabled = allowedTools.map(_ => _.isEnabled())
+  learningLog('tools.afterIsEnabled', { len: allowedTools.length })
   return allowedTools.filter((_, i) => isEnabled[i])
 }
 
