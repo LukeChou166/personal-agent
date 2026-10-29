@@ -77,6 +77,7 @@ import {
   isDeferredTool,
   SEARCH_EXTRA_TOOLS_TOOL_NAME,
 } from '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
+import { learningLog } from 'src/utils/learningLog.js'
 
 function convertToResponsesReasoningEffort(
   effortValue: unknown,
@@ -363,7 +364,7 @@ export async function* queryModelOpenAI(
       : getOfficialOpenAIPromptCacheKey(process.env.OPENAI_BASE_URL, sessionId)
     const useOfficialOpenAICache = promptCacheKey !== undefined
 
-    logForDebugging(
+    learningLog(
       `[OpenAI] Calling model=${openaiModel}, messages=${openaiMessages.length}, tools=${openaiTools.length}, thinking=${enableThinking}${promptCacheKey ? `, prompt_cache_key=${promptCacheKey}` : ''}`,
     )
 

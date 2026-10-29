@@ -1066,29 +1066,6 @@ async function* queryModel(
     tools: tools.length,
   })
 
-  // Check cheap conditions first — the off-switch await blocks on GrowthBook
-  // init (~10ms). For non-Opus models (haiku, sonnet) this skips the await
-  // entirely. Subscribers don't hit this path at all.
-  if (
-    !isClaudeAISubscriber() &&
-    isNonCustomOpusModel(options.model) &&
-    (
-      await getDynamicConfig_BLOCKS_ON_INIT<{ activated: boolean }>(
-        'tengu-off-switch',
-        {
-          activated: false,
-        },
-      )
-    ).activated
-  ) {
-    logEvent('tengu_off_switch_query', {})
-    yield getAssistantMessageFromError(
-      new Error(CUSTOM_OFF_SWITCH_MESSAGE),
-      options.model,
-    )
-    return
-  }
-
   // Derive previous request ID from the last assistant message in this query chain.
   // This is scoped per message array (main thread, subagent, teammate each have their own),
   // so concurrent agents don't clobber each other's request chain tracking.
@@ -1120,42 +1097,6 @@ async function* queryModel(
   }
 
   let advisorModel: string | undefined
-  if (isAgenticQuery && isAdvisorEnabled()) {
-    let advisorOption = options.advisorModel
-
-    const advisorExperiment = getExperimentAdvisorModels()
-    if (advisorExperiment !== undefined) {
-      if (
-        normalizeModelStringForAPI(advisorExperiment.baseModel) ===
-        normalizeModelStringForAPI(options.model)
-      ) {
-        // Override the advisor model if the base model matches. We
-        // should only have experiment models if the user cannot
-        // configure it themselves.
-        advisorOption = advisorExperiment.advisorModel
-      }
-    }
-
-    if (advisorOption) {
-      const normalizedAdvisorModel = normalizeModelStringForAPI(
-        parseUserSpecifiedModel(advisorOption),
-      )
-      if (!modelSupportsAdvisor(options.model)) {
-        logForDebugging(
-          `[AdvisorTool] Skipping advisor - base model ${options.model} does not support advisor`,
-        )
-      } else if (!isValidAdvisorModel(normalizedAdvisorModel)) {
-        logForDebugging(
-          `[AdvisorTool] Skipping advisor - ${normalizedAdvisorModel} is not a valid advisor model`,
-        )
-      } else {
-        advisorModel = normalizedAdvisorModel
-        logForDebugging(
-          `[AdvisorTool] Server-side tool enabled with ${advisorModel} as the advisor model`,
-        )
-      }
-    }
-  }
 
   // Check if tool search is enabled (checks mode, model support, and threshold for auto mode)
   // This is async because it may need to calculate MCP tool description sizes for TstAuto mode
@@ -1224,27 +1165,6 @@ async function* queryModel(
   // ant-only CACHE_EDITING_BETA_HEADER constant.
   let cachedMCEnabled = false
   let cacheEditingBetaHeader = ''
-  if (feature('CACHED_MICROCOMPACT')) {
-    const {
-      isCachedMicrocompactEnabled,
-      isModelSupportedForCacheEditing,
-      getCachedMCConfig,
-    } = await import('../compact/cachedMicrocompact.js')
-    const betas = await import('src/constants/betas.js')
-    cacheEditingBetaHeader = betas.CACHE_EDITING_BETA_HEADER
-    const featureEnabled = isCachedMicrocompactEnabled()
-    const modelSupported = isModelSupportedForCacheEditing(options.model)
-    // cachedMC requires a non-empty beta header; the CACHE_EDITING_BETA_HEADER
-    // constant is '' in this fork (upstream hasn't published the real value).
-    // Without it, cache_reference and cache_edits in the request body cause
-    // API 400: "tool_result.cache_reference: Extra inputs are not permitted".
-    const headerAvailable = !!cacheEditingBetaHeader
-    cachedMCEnabled = featureEnabled && modelSupported && headerAvailable
-    const config = getCachedMCConfig()
-    logForDebugging(
-      `Cached MC gate: enabled=${featureEnabled} modelSupported=${modelSupported} headerAvailable=${headerAvailable} model=${options.model} supportedModels=${jsonStringify((config as Record<string, unknown>).supportedModels)}`,
-    )
-  }
 
   const useGlobalCacheFeature = shouldUseGlobalCacheScope()
   // MCP tools are per-user → dynamic tool section → can't globally cache.
@@ -1283,7 +1203,7 @@ async function* queryModel(
   )
 
   if (useSearchExtraTools) {
-    logForDebugging(
+    learningLog(
       `Dynamic tool loading: 0/${deferredToolNames.size} deferred tools in API tools array (all via ExecuteExtraTool)`,
     )
   }
@@ -1357,6 +1277,7 @@ async function* queryModel(
     // OpenAI emulates Anthropic's dynamic tool loading client-side. It needs
     // the full tool pool so SearchExtraToolsTool can search deferred MCP tools that
     // were intentionally filtered out of the initial API tool list above.
+    learningLog('claude.queryModelOpenAI')
     yield* queryModelOpenAI(
       messagesForAPI,
       systemPrompt,
