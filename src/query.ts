@@ -919,7 +919,7 @@ async function* queryLoop(
         try {
           let streamingFallbackOccured = false
           queryCheckpoint('query_api_streaming_start')
-          learningLog('query.call_model', {
+          learningLog('query.call_model.query_api_streaming_start', {
             model: currentModel,
             messages: messagesForQuery.length,
             tools: toolUseContext.options.tools.length,
@@ -976,7 +976,10 @@ async function* queryLoop(
               langfuseTrace: toolUseContext.langfuseTrace,
             },
           })) {
-            learningLog('query.call_model, process model call result')
+            learningLog(
+              'query.call_model, process model call result, streamingFallbackOccured: ',
+              { streamingFallbackOccured },
+            )
             // We won't use the tool_calls from the first attempt
             // We could.. but then we'd have to merge assistant messages
             // with different ids and double up on full the tool_results
@@ -1016,6 +1019,8 @@ async function* queryLoop(
             // assistantMessages.push below — it flows back to the API and
             // mutating it would break prompt caching (byte mismatch).
             let yieldMessage: typeof message = message
+            learningLog('query.call_model.contentArr.message', { message })
+            //  message={"type":"stream_event","event":{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"搞懂"}}}
             if (message.type === 'assistant') {
               const assistantMsg = message as AssistantMessage
               const contentArr = Array.isArray(assistantMsg.message?.content)
@@ -1026,6 +1031,10 @@ async function* queryLoop(
                     [key: string]: unknown
                   }>)
                 : []
+              learningLog(
+                'query.call_model.contentArr.contentArr, content length:',
+                { contentArr, len: contentArr.length },
+              )
               let clonedContent: typeof contentArr | undefined
               for (let i = 0; i < contentArr.length; i++) {
                 const block = contentArr[i]!

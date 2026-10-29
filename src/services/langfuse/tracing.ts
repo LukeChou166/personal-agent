@@ -8,6 +8,7 @@ import { isLangfuseEnabled } from './client.js'
 import { sanitizeToolInput, sanitizeToolOutput } from './sanitize.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import { getCoreUserData } from 'src/utils/user.js'
+import { learningLog } from 'src/utils/learningLog.js'
 
 export type { LangfuseSpan }
 
@@ -64,10 +65,10 @@ export function createTrace(params: {
       )
       rootSpan._userId = userId
     }
-    logForDebugging(`[langfuse] Trace created: ${rootSpan.id}`)
+    learningLog(`[langfuse] Trace created: ${rootSpan.id}`)
     return rootSpan as unknown as LangfuseSpan
   } catch (e) {
-    logForDebugging(`[langfuse] createTrace failed: ${e}`, { level: 'error' })
+    learningLog(`[langfuse] createTrace failed: ${e}`, { level: 'error' })
     return null
   }
 }
