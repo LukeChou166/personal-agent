@@ -912,3 +912,364 @@ describe('prompt caching support', () => {
     expect(msgDelta.usage.output_tokens).toBe(30)
   })
 })
+
+describe('non-streaming and envelope payloads', () => {
+  // Regression: some gateways and non-streaming bridges hand back a Chat
+  // Completions payload wrapped in `{ body, is_complete }`, with the assistant
+  // text under `choices[0].message` instead of `choices[0].delta`. The adapter
+  // originally read only `delta`, so the entire message was dropped without any
+  // error surfacing to the user.
+  const ENVELOPE = {
+    body: {
+      choices: [
+        {
+          finish_reason: 'stop',
+          message: {
+            role: 'assistant',
+            content: '理解大型开源项目确实是个挑战。',
+            reasoning_content: '用户问的是方法论问题。',
+          },
+        },
+      ],
+    },
+    is_complete: true,
+  }
+
+  async function collectRaw(chunks: unknown[]) {
+    const stream: AsyncIterable<ChatCompletionChunk> = {
+      [Symbol.asyncIterator]() {
+        let i = 0
+        return {
+          async next() {
+            if (i >= chunks.length) return { done: true, value: undefined }
+            return { done: false, value: chunks[i++] as ChatCompletionChunk }
+          },
+        }
+      },
+    }
+    const events: any[] = []
+    for await (const event of adaptOpenAIStreamToAnthropic(
+      stream,
+      'deepseek-chat',
+    )) {
+      events.push(event)
+    }
+    return events
+  }
+
+  function textOf(events: any[]) {
+    return events
+      .filter(
+        e => e.type === 'content_block_delta' && e.delta?.type === 'text_delta',
+      )
+      .map(e => e.delta.text)
+      .join('')
+  }
+
+  function thinkingOf(events: any[]) {
+    return events
+      .filter(
+        e =>
+          e.type === 'content_block_delta' &&
+          e.delta?.type === 'thinking_delta',
+      )
+      .map(e => e.delta.thinking)
+      .join('')
+  }
+
+  test('unwraps { body, is_complete } envelope and reads message content', async () => {
+    const events = await collectRaw([ENVELOPE])
+
+    expect(textOf(events)).toBe('理解大型开源项目确实是个挑战。')
+    expect(thinkingOf(events)).toBe('用户问的是方法论问题。')
+
+    // The message must be terminated, otherwise downstream never assembles
+    // an AssistantMessage at all.
+    expect(events.some(e => e.type === 'message_stop')).toBe(true)
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    expect(msgDelta.delta.stop_reason).toBe('end_turn')
+  })
+
+  test('reads non-streaming message without the envelope', async () => {
+    const events = await collectRaw([ENVELOPE.body])
+
+    expect(textOf(events)).toBe('理解大型开源项目确实是个挑战。')
+    expect(events.some(e => e.type === 'message_stop')).toBe(true)
+  })
+
+  test('non-streaming tool_calls without index map to distinct blocks', async () => {
+    const events = await collectRaw([
+      {
+        body: {
+          choices: [
+            {
+              finish_reason: 'tool_calls',
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'call_1',
+                    type: 'function',
+                    function: { name: 'Bash', arguments: '{"cmd":"ls"}' },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        is_complete: true,
+      },
+    ])
+
+    const toolStart = events.find(
+      e =>
+        e.type === 'content_block_start' &&
+        e.content_block?.type === 'tool_use',
+    ) as any
+    expect(toolStart?.content_block?.name).toBe('Bash')
+
+    const json = events
+      .filter(e => e.delta?.type === 'input_json_delta')
+      .map(e => e.delta.partial_json)
+      .join('')
+    expect(json).toBe('{"cmd":"ls"}')
+
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    expect(msgDelta.delta.stop_reason).toBe('tool_use')
+  })
+
+  test('finish-only chunk still terminates the message', async () => {
+    // A trailing chunk carrying finish_reason but an empty delta must not be
+    // skipped — it is what closes the content blocks and emits message_stop.
+    const events = await collectRaw([
+      { choices: [{ delta: { content: 'hi' }, finish_reason: null }] },
+      { choices: [{ delta: {}, finish_reason: 'stop' }] },
+      { usage: { prompt_tokens: 10, completion_tokens: 2 } },
+    ])
+
+    expect(textOf(events)).toBe('hi')
+    expect(events.filter(e => e.type === 'message_stop').length).toBe(1)
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    expect(msgDelta.usage.output_tokens).toBe(2)
+  })
+
+  test('empty stream emits nothing', async () => {
+    const events = await collectRaw([])
+    expect(events.length).toBe(0)
+  })
+})
+
+describe('interleaved reasoning and text blocks', () => {
+  // Regression: the adapter used a single content-index cursor shared by two
+  // independent `thinkingBlockOpen` / `textBlockOpen` flags. When reasoning
+  // resumed after the answer had started, the new thinking block claimed the
+  // next index and every later text_delta — emitted against that same cursor —
+  // landed on the thinking block. Answer text was appended to `thinking` and
+  // the real text block was left truncated.
+
+  /** Replay the adapter output the way src/services/api/openai/index.ts does. */
+  function replay(events: any[]) {
+    const blocks: Record<number, any> = {}
+    for (const e of events) {
+      if (e.type === 'content_block_start')
+        blocks[e.index] = { ...e.content_block }
+      if (e.type === 'content_block_delta') {
+        const b = blocks[e.index]
+        if (!b) continue
+        if (e.delta?.type === 'text_delta')
+          b.text = (b.text ?? '') + e.delta.text
+        else if (e.delta?.type === 'thinking_delta')
+          b.thinking = (b.thinking ?? '') + e.delta.thinking
+      }
+    }
+    return blocks
+  }
+
+  function chunk(delta: any, finish_reason: string | null = null) {
+    return { choices: [{ index: 0, delta, finish_reason }] }
+  }
+
+  test('text after reasoning stays in the text block', async () => {
+    const events = await collectEvents([
+      makeChunk({
+        choices: [
+          { index: 0, delta: { reasoning_content: 'R1' }, finish_reason: null },
+        ],
+      }),
+      makeChunk({
+        choices: [{ index: 0, delta: { content: 'T1' }, finish_reason: null }],
+      }),
+      makeChunk({
+        choices: [
+          { index: 0, delta: { reasoning_content: 'R2' }, finish_reason: null },
+        ],
+      }),
+      makeChunk({
+        choices: [{ index: 0, delta: { content: 'T2' }, finish_reason: null }],
+      }),
+      makeChunk({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }),
+    ])
+
+    const blocks = replay(events)
+    // The critical assertion: no thinking block may carry a `text` payload,
+    // and every text fragment must survive.
+    for (const b of Object.values(blocks)) {
+      if (b.type === 'thinking') expect(b.text).toBeUndefined()
+    }
+    const texts = Object.values(blocks)
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+    expect(texts.join('')).toBe('T1T2')
+    const thinkings = Object.values(blocks)
+      .filter(b => b.type === 'thinking')
+      .map(b => b.thinking)
+    expect(thinkings.join('')).toBe('R1R2')
+  })
+
+  test('reasoning arriving after text does not swallow the answer', async () => {
+    const events = await collectEvents([
+      makeChunk({
+        choices: [{ index: 0, delta: { content: 'T1' }, finish_reason: null }],
+      }),
+      makeChunk({
+        choices: [
+          { index: 0, delta: { reasoning_content: 'R1' }, finish_reason: null },
+        ],
+      }),
+      makeChunk({
+        choices: [{ index: 0, delta: { content: 'T2' }, finish_reason: null }],
+      }),
+      makeChunk({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }),
+    ])
+
+    const blocks = replay(events)
+    for (const b of Object.values(blocks)) {
+      if (b.type === 'thinking') expect(b.text).toBeUndefined()
+    }
+    const texts = Object.values(blocks)
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+    expect(texts.join('')).toBe('T1T2')
+  })
+
+  test('non-final finish_reason does not split the answer into two blocks', async () => {
+    // Some endpoints send a non-null finish_reason on a chunk that is not the
+    // last one, then keep streaming. Closing blocks on that chunk used to
+    // force the remaining content into a second text block.
+    const events = await collectEvents([
+      makeChunk({
+        choices: [
+          { index: 0, delta: { reasoning_content: 'R1' }, finish_reason: null },
+        ],
+      }),
+      makeChunk({
+        choices: [{ index: 0, delta: { content: 'T1' }, finish_reason: null }],
+      }),
+      makeChunk({
+        choices: [
+          { index: 0, delta: { content: 'T2' }, finish_reason: 'stop' },
+        ],
+      }),
+      makeChunk({
+        choices: [{ index: 0, delta: { content: 'T3' }, finish_reason: null }],
+      }),
+      makeChunk({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }),
+    ])
+
+    const blocks = replay(events)
+    const textBlocks = Object.values(blocks).filter(b => b.type === 'text')
+    expect(textBlocks.length).toBe(1)
+    expect(textBlocks[0]?.text).toBe('T1T2T3')
+  })
+
+  test('repeated empty reasoning_content does not fragment the answer', async () => {
+    // Regression: endpoints that emit `reasoning_content: ""` on EVERY chunk
+    // used to oscillate — each chunk re-opened a thinking block (the previous
+    // one had been closed when the answer started), which closed the text
+    // block, which forced the next `content` to open another one. Result: one
+    // content block per delta, rendered as one line per fragment, plus a flood
+    // of empty thinking blocks.
+    const frags = ['——他们', '给的反馈', '会逼', '你理解', '约定和']
+    const events = await collectEvents([
+      ...frags.map(f =>
+        makeChunk({
+          choices: [
+            {
+              index: 0,
+              delta: { reasoning_content: '', content: f },
+              finish_reason: null,
+            },
+          ],
+        }),
+      ),
+      makeChunk({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }),
+    ])
+
+    const blocks = replay(events)
+    const textBlocks = Object.values(blocks).filter(b => b.type === 'text')
+    expect(textBlocks.length).toBe(1)
+    expect(textBlocks[0]?.text).toBe(frags.join(''))
+
+    // Exactly one (empty) thinking block — the DeepSeek v4 round-trip case.
+    const thinkingBlocks = Object.values(blocks).filter(
+      b => b.type === 'thinking',
+    )
+    expect(thinkingBlocks.length).toBe(1)
+    expect(thinkingBlocks[0]?.thinking).toBe('')
+  })
+
+  test('non-empty reasoning after the answer still opens a real thinking block', async () => {
+    // The empty-reasoning guard must not suppress genuine reasoning deltas.
+    const events = await collectEvents([
+      makeChunk({
+        choices: [
+          { index: 0, delta: { reasoning_content: 'R1' }, finish_reason: null },
+        ],
+      }),
+      makeChunk({
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: '', content: 'T1' },
+            finish_reason: null,
+          },
+        ],
+      }),
+      makeChunk({
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: '', content: 'T2' },
+            finish_reason: null,
+          },
+        ],
+      }),
+      makeChunk({
+        choices: [
+          { index: 0, delta: { reasoning_content: 'R2' }, finish_reason: null },
+        ],
+      }),
+      makeChunk({
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: '', content: 'T3' },
+            finish_reason: null,
+          },
+        ],
+      }),
+      makeChunk({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }),
+    ])
+
+    const blocks = replay(events)
+    const thinkings = Object.values(blocks)
+      .filter(b => b.type === 'thinking')
+      .map(b => b.thinking)
+    expect(thinkings).toEqual(['R1', 'R2'])
+    const texts = Object.values(blocks)
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+    expect(texts.join('')).toBe('T1T2T3')
+  })
+})
