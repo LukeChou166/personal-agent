@@ -33,6 +33,69 @@ import { normalizeOpenAIUsage } from './openaiUsage.js'
  *   OpenAI reports cached tokens in usage.prompt_tokens_details.cached_tokens.
  *   This is mapped to Anthropic's cache_read_input_tokens.
  */
+/**
+ * Incremental payload shape shared by streaming (`delta`) and non-streaming
+ * (`message`) Chat Completions responses.
+ */
+type CompatDelta = {
+  content?: string | null
+  reasoning_content?: string | null
+  tool_calls?:
+    | {
+        index?: number
+        id?: string
+        type?: string
+        function?: { name?: string; arguments?: string }
+      }[]
+    | null
+}
+
+type CompatChunk = {
+  choices?:
+    | {
+        delta?: CompatDelta | null
+        message?: CompatDelta | null
+        finish_reason?: string | null
+      }[]
+    | null
+  usage?: {
+    prompt_tokens?: number | null
+    completion_tokens?: number | null
+  } | null
+}
+
+const EMPTY_DELTA: CompatDelta = {}
+
+/**
+ * Normalize whatever the endpoint handed us into a CompatChunk.
+ *
+ * Two shapes have to be handled because they both reach this adapter:
+ * 1. Some gateways/bridges wrap the payload in `{ body, is_complete }` instead
+ *    of returning the Chat Completion object directly. Without unwrapping,
+ *    `choices` is unreachable and the whole response is silently dropped.
+ * 2. `usage` may live on the envelope rather than on the inner payload, so
+ *    fall back to the outer object when the inner one has none.
+ */
+function toCompatChunk(raw: unknown): CompatChunk {
+  if (typeof raw !== 'object' || raw === null) return {}
+  const outer = raw as Record<string, unknown>
+  const body = outer.body
+  const source =
+    typeof body === 'object' && body !== null
+      ? (body as Record<string, unknown>)
+      : outer
+  const innerUsage =
+    typeof source.usage === 'object' && source.usage !== null
+      ? source.usage
+      : undefined
+  return {
+    choices: (source.choices ?? undefined) as unknown as CompatChunk['choices'],
+    usage: (innerUsage ??
+      outer.usage ??
+      undefined) as unknown as CompatChunk['usage'],
+  }
+}
+
 export async function* adaptOpenAIStreamToAnthropic(
   stream: AsyncIterable<ChatCompletionChunk>,
   model: string,
@@ -49,11 +112,43 @@ export async function* adaptOpenAIStreamToAnthropic(
     { contentIndex: number; id: string; name: string; arguments: string }
   >()
 
-  // Track thinking block state
-  let thinkingBlockOpen = false
+  // Index of the currently open thinking / text block, or -1 when none is open.
+  //
+  // These MUST be tracked separately rather than as two booleans plus a shared
+  // cursor. A model may emit reasoning again after it has started answering
+  // (or interleave the two). With a shared cursor the new thinking block takes
+  // the next index, and every subsequent text_delta — emitted against that
+  // cursor — lands on the *thinking* block's index, so answer text gets
+  // appended into `thinking` and the real text block is left truncated.
+  let thinkingBlockIndex = -1
+  let textBlockIndex = -1
 
-  // Track text block state
-  let textBlockOpen = false
+  // Close helpers. `yield*` delegation keeps emit ordering identical to the
+  // previous inline version while letting every branch share the logic.
+  function* closeThinking(): Generator<BetaRawMessageStreamEvent, void> {
+    if (thinkingBlockIndex < 0) return
+    yield {
+      type: 'content_block_stop',
+      index: thinkingBlockIndex,
+    } as BetaRawMessageStreamEvent
+    openBlockIndices.delete(thinkingBlockIndex)
+    thinkingBlockIndex = -1
+  }
+
+  function* closeText(): Generator<BetaRawMessageStreamEvent, void> {
+    if (textBlockIndex < 0) return
+    yield {
+      type: 'content_block_stop',
+      index: textBlockIndex,
+    } as BetaRawMessageStreamEvent
+    openBlockIndices.delete(textBlockIndex)
+    textBlockIndex = -1
+  }
+
+  function* closeAllContent(): Generator<BetaRawMessageStreamEvent, void> {
+    yield* closeThinking()
+    yield* closeText()
+  }
 
   // Track raw OpenAI usage across chunks. The normalized Anthropic fields are
   // disjoint: ordinary input + cache reads + cache writes = total input.
@@ -70,9 +165,13 @@ export async function* adaptOpenAIStreamToAnthropic(
   let pendingFinishReason: string | null = null
   let pendingHasToolCalls = false
 
-  for await (const chunk of stream) {
+  for await (const rawChunk of stream) {
+    const chunk = toCompatChunk(rawChunk)
     const choice = chunk.choices?.[0]
-    const delta = choice?.delta
+    // Streaming sends incremental text in `choices[0].delta`; non-streaming
+    // (and gateways that buffer the whole completion) send the finished text
+    // in `choices[0].message`. Read whichever is present.
+    const delta = choice?.delta ?? choice?.message
 
     // Extract usage from any chunk that carries it.
     if (chunk.usage) {
@@ -127,24 +226,53 @@ export async function* adaptOpenAIStreamToAnthropic(
       } as unknown as BetaRawMessageStreamEvent
     }
 
-    // Skip chunks that carry only usage data (no delta content)
-    if (!delta) continue
+    // Skip chunks that carry only usage data (no delta content).
+    // A chunk with a finish_reason must NOT be skipped even when it has no
+    // delta: some endpoints send the terminator as `{ delta: {}, finish_reason }`
+    // and non-streaming payloads have no delta at all. Skipping them left
+    // pendingFinishReason null, so message_delta/message_stop were never
+    // emitted and the whole message was silently dropped downstream.
+    if (!delta && !choice?.finish_reason) continue
+
+    // A finish-only chunk has no delta; substitute an empty one so the content
+    // handlers below can read fields without per-access null checks.
+    const payload = delta ?? EMPTY_DELTA
 
     // Handle reasoning_content → Anthropic thinking block.
     // Empty string is a valid signal: DeepSeek v4 thinking mode sometimes
     // returns reasoning_content: "" when the model answers directly. The
     // empty thinking block must round-trip back to the API in subsequent
     // requests, otherwise DeepSeek rejects with 400.
-    const reasoningContent = (delta as any).reasoning_content
+    const reasoningContent = payload.reasoning_content
     if (reasoningContent != null) {
-      if (!thinkingBlockOpen) {
+      // An empty reasoning_content may only open a block when nothing has been
+      // emitted yet — DeepSeek v4 sends "" and still requires the (empty)
+      // thinking block to round-trip back on the next request.
+      //
+      // Endpoints that repeat `reasoning_content: ""` on EVERY chunk would
+      // otherwise oscillate: each chunk re-opens a thinking block (because the
+      // previous one was already closed when the answer started), which closes
+      // the text block, which forces the next `content` to open yet another
+      // text block — one content block per delta. Downstream that renders as
+      // one line per fragment and floods the message with empty thinking
+      // blocks.
+      const opensFirstBlock = currentContentIndex < 0
+      const canOpenThinking =
+        thinkingBlockIndex < 0 && (reasoningContent !== '' || opensFirstBlock)
+
+      if (canOpenThinking) {
+        // Close the text block first when reasoning resumes mid-answer.
+        // Otherwise the new thinking block claims the next index and later
+        // text_delta events would be attributed to it.
+        yield* closeText()
+
         currentContentIndex++
-        thinkingBlockOpen = true
-        openBlockIndices.add(currentContentIndex)
+        thinkingBlockIndex = currentContentIndex
+        openBlockIndices.add(thinkingBlockIndex)
 
         yield {
           type: 'content_block_start',
-          index: currentContentIndex,
+          index: thinkingBlockIndex,
           content_block: {
             type: 'thinking',
             thinking: '',
@@ -153,10 +281,10 @@ export async function* adaptOpenAIStreamToAnthropic(
         } as BetaRawMessageStreamEvent
       }
 
-      if (reasoningContent !== '') {
+      if (thinkingBlockIndex >= 0 && reasoningContent !== '') {
         yield {
           type: 'content_block_delta',
-          index: currentContentIndex,
+          index: thinkingBlockIndex,
           delta: {
             type: 'thinking_delta',
             thinking: reasoningContent,
@@ -166,25 +294,18 @@ export async function* adaptOpenAIStreamToAnthropic(
     }
 
     // Handle text content
-    if (delta.content != null && delta.content !== '') {
-      if (!textBlockOpen) {
+    if (payload.content != null && payload.content !== '') {
+      if (textBlockIndex < 0) {
         // Close thinking block if still open
-        if (thinkingBlockOpen) {
-          yield {
-            type: 'content_block_stop',
-            index: currentContentIndex,
-          } as BetaRawMessageStreamEvent
-          openBlockIndices.delete(currentContentIndex)
-          thinkingBlockOpen = false
-        }
+        yield* closeThinking()
 
         currentContentIndex++
-        textBlockOpen = true
-        openBlockIndices.add(currentContentIndex)
+        textBlockIndex = currentContentIndex
+        openBlockIndices.add(textBlockIndex)
 
         yield {
           type: 'content_block_start',
-          index: currentContentIndex,
+          index: textBlockIndex,
           content_block: {
             type: 'text',
             text: '',
@@ -194,39 +315,23 @@ export async function* adaptOpenAIStreamToAnthropic(
 
       yield {
         type: 'content_block_delta',
-        index: currentContentIndex,
+        index: textBlockIndex,
         delta: {
           type: 'text_delta',
-          text: delta.content,
+          text: payload.content,
         },
       } as BetaRawMessageStreamEvent
     }
 
     // Handle tool calls
-    if (delta.tool_calls) {
-      for (const tc of delta.tool_calls) {
-        const tcIndex = tc.index
+    if (payload.tool_calls) {
+      for (const tc of payload.tool_calls) {
+        // Non-streaming tool_calls carry no `index`; synthesize one so multiple
+        // calls don't collapse onto the same map key.
+        const tcIndex = tc.index ?? toolBlocks.size
 
         if (!toolBlocks.has(tcIndex)) {
-          // Close thinking block if open
-          if (thinkingBlockOpen) {
-            yield {
-              type: 'content_block_stop',
-              index: currentContentIndex,
-            } as BetaRawMessageStreamEvent
-            openBlockIndices.delete(currentContentIndex)
-            thinkingBlockOpen = false
-          }
-
-          // Close text block if open
-          if (textBlockOpen) {
-            yield {
-              type: 'content_block_stop',
-              index: currentContentIndex,
-            } as BetaRawMessageStreamEvent
-            openBlockIndices.delete(currentContentIndex)
-            textBlockOpen = false
-          }
+          yield* closeAllContent()
 
           // Start new tool_use block
           currentContentIndex++
@@ -270,57 +375,43 @@ export async function* adaptOpenAIStreamToAnthropic(
       }
     }
 
-    // Handle finish
+    // Handle finish.
+    // Only the finish state is recorded here — blocks stay open and are closed
+    // by the sweep below. Some endpoints emit a non-null finish_reason on a
+    // non-final chunk and keep streaming content afterwards; closing here used
+    // to force every later chunk into a brand-new second text block.
     if (choice?.finish_reason) {
-      if (thinkingBlockOpen) {
-        yield {
-          type: 'content_block_stop',
-          index: currentContentIndex,
-        } as BetaRawMessageStreamEvent
-        openBlockIndices.delete(currentContentIndex)
-        thinkingBlockOpen = false
-      }
-
-      if (textBlockOpen) {
-        yield {
-          type: 'content_block_stop',
-          index: currentContentIndex,
-        } as BetaRawMessageStreamEvent
-        openBlockIndices.delete(currentContentIndex)
-        textBlockOpen = false
-      }
-
-      for (const [, block] of toolBlocks) {
-        if (openBlockIndices.has(block.contentIndex)) {
-          yield {
-            type: 'content_block_stop',
-            index: block.contentIndex,
-          } as BetaRawMessageStreamEvent
-          openBlockIndices.delete(block.contentIndex)
-        }
-      }
-
       pendingFinishReason = choice.finish_reason
       pendingHasToolCalls = toolBlocks.size > 0
     }
   }
 
-  // Safety: close any remaining open blocks
+  // Close any remaining open blocks. Iterating the Set preserves ascending
+  // index order, so the stop events stay correctly sequenced.
   for (const idx of openBlockIndices) {
     yield {
       type: 'content_block_stop',
       index: idx,
     } as BetaRawMessageStreamEvent
   }
+  openBlockIndices.clear()
+  thinkingBlockIndex = -1
+  textBlockIndex = -1
 
-  // Emit message_delta + message_stop
-  if (pendingFinishReason !== null) {
+  // Emit message_delta + message_stop.
+  // Gated on `started` rather than on pendingFinishReason: an endpoint that
+  // omits finish_reason entirely used to produce no message_stop at all, so
+  // downstream never assembled an AssistantMessage and the reply vanished
+  // without any error. Default such responses to end_turn.
+  if (started) {
     const stopReason =
       pendingFinishReason === 'length'
         ? 'max_tokens'
         : pendingHasToolCalls
           ? 'tool_use'
-          : mapFinishReason(pendingFinishReason)
+          : pendingFinishReason
+            ? mapFinishReason(pendingFinishReason)
+            : 'end_turn'
 
     yield {
       type: 'message_delta',
