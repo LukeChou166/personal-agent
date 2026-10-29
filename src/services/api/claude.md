@@ -157,9 +157,20 @@ if (!partialMessage || (newMessages.length === 0 && !stopReason))
 
 `src/services/api/withRetry.ts:416` 在 context-overflow 时会写入 `retryContext.maxTokensOverride`。因 `src/services/api/claude.ts:1686` 中 `retryContext` 优先级**高于** `options.maxOutputTokensOverride`，若该值在重试间残留，会把 query.ts  escalate 的 64k 覆盖回小值，导致 escalate 空转。
 
-### B6【低】兼容层流适配器
+### B6【已定位并修复】兼容层流适配器：空 `reasoning_content` 引发 block 震荡
 
-`src/services/api/openai/index.ts`、`src/services/api/openai/responsesAdapter.ts`、`src/services/api/gemini/index.ts`、`src/services/api/grok/index.ts` 各自的 SSE→Anthropic 事件转换，存在丢 chunk 的独立分支，仅在 `CLAUDE_CODE_USE_OPENAI/GEMINI/GROK=1` 时相关。
+适配层实际位于 `packages/@ant/model-provider/src/shared/openaiStreamAdapter.ts`（`adaptOpenAIStreamToAnthropic`），被 `src/services/api/openai/index.ts`、`responsesAdapter.ts` 共用；Gemini / Grok 在 `src/services/api/gemini/index.ts`、`grok/index.ts` 各自实现。仅在 `CLAUDE_CODE_USE_OPENAI/GEMINI/GROK=1` 时生效。
+
+**已修复的缺陷（2026-10-29）**：若端点在**每个 chunk** 都回传 `reasoning_content: ""`，适配器会震荡——
+
+1. `content` 到来 → `closeThinking()`（索引置 -1）→ 开 text block
+2. 下一 chunk 的空 `reasoning_content` 因 `thinkingBlockIndex < 0` 成立 → **重新开 thinking block**
+3. 开销 thinking 前先 `closeText()` → 关闭刚开的 text block
+4. 该 chunk 的 `content` 只能**再开一个 text block**
+
+→ 每个 chunk 产出一个独立 text block。表现：回答被拆成**一行一个片段**（每个片段前带 `⏺`），且消息里塞满 `thinking: "" / signature: ""` 的空 thinking block（即"少了关键字段"——每条 message 只有 1 个 block，`usage` / `stop_reason` 只回写 `newMessages.at(-1)`，前面的 message 这些字段缺失）。
+
+修复：空 `reasoning_content` 仅在**尚未分配任何 block**（`currentContentIndex < 0`）时才开 block（保留 DeepSeek v4 空 thinking round-trip 语义，否则其回传会 400）；非空 `reasoning_content` 不受限制，仍可正常开启 / 追加。
 
 ## C. 建议的修复方向
 
@@ -175,3 +186,19 @@ if (!partialMessage || (newMessages.length === 0 && !stopReason))
 - `tengu_streaming_error` — `src/services/api/claude.ts:2215` 等（确认 delta 丢失）
 - `tengu_streaming_idle_timeout` — `src/services/api/claude.ts:2054`（确认 B3）
 - `api.content_block_stop` 的 `chars` 字段 — `src/services/api/claude.ts:2383`（对比实际收到的文本长度）
+
+---
+
+## E. 复现与验证方法（B6）
+
+遇到"回答被切成一行一个片段"时，直接把端点返回的 chunk 序列喂给 `adaptOpenAIStreamToAnthropic`，统计 text block 数量即可定性：
+
+- **text block 数 == 1** → 适配器正常，问题在下游（回到 B1/B2）
+- **text block 数 ≈ chunk 数** → 命中 B6 的震荡；再区分端点是否每 chunk 都带 `reasoning_content`
+
+回归用例（已落库，`packages/@ant/model-provider/src/shared/__tests__/openaiStreamAdapter.test.ts`）：
+
+- `repeated empty reasoning_content does not fragment the answer` — 每 chunk 空 reasoning，断言 1 个 text block 且内容完整拼接、仅 1 个空 thinking block
+- `non-empty reasoning after the answer still opens a real thinking block` — 断言 `R1`/`R2` 两个 thinking block 均保留，文本 `T1T2T3` 不丢
+
+> 排查手法：先写一次性脚本复现（统计 `content_block_stop` 数与各 block 文本），确认根因后再改代码，最后把用例固化进测试。临时脚本用完即删。
