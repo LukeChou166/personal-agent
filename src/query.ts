@@ -542,7 +542,7 @@ async function* queryLoop(
     }
 
     let messagesForQuery = getMessagesAfterCompactBoundary(messages)
-    learningLog('query.messagesForQuery', { messagesForQuery })
+    learningLog('query.messagesForQuery', { messagesForQuery }) // messagesForQuery=[object Object],[object Object]
     // Release toolUseResult payloads from previous turns — the next API call
     // only needs message.message.content (tool_result blocks), not the raw
     // output object. This prevents unbounded memory growth in long sessions
