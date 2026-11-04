@@ -105,10 +105,9 @@ import {
 } from './UI.js';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
-const proactiveModule =
-  feature('PROACTIVE') || feature('KAIROS')
-    ? (require('src/proactive/index.js') as typeof import('src/proactive/index.js'))
-    : null;
+const proactiveModule = feature('KAIROS')
+  ? (require('src/proactive/index.js') as typeof import('src/proactive/index.js'))
+  : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 // Progress display constants (for showing background hint)

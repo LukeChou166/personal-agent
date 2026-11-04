@@ -21,7 +21,6 @@ import {
 import { cleanupTempDir, createTempDir } from '../../../tests/mocks/file-system'
 import { mkdir, writeFile } from 'fs/promises'
 import { join } from 'path'
-import { writeRegistry } from '../../utils/pipeRegistry'
 import { getAutonomyPanelBaseActionCountForTests } from '../autonomyPanel'
 
 let tempDir = ''
@@ -337,21 +336,6 @@ describe('/autonomy', () => {
         ],
       }),
     )
-    await writeRegistry({
-      version: 1,
-      mainMachineId: 'machine-main-123456',
-      main: {
-        id: 'main-id',
-        pid: 123,
-        machineId: 'machine-main-123456',
-        startedAt: 1,
-        ip: '127.0.0.1',
-        mac: '00:11:22:33:44:55',
-        hostname: 'main-host',
-        pipeName: 'main-pipe',
-      },
-      subs: [],
-    })
 
     const { result } = await callAutonomy('status --deep')
 
@@ -367,8 +351,6 @@ describe('/autonomy', () => {
     expect(result).toContain('## Teams')
     expect(result).toContain('alpha: teammates=1')
     expect(result).toContain('@worker: idle backend=in-process')
-    expect(result).toContain('## Pipes')
-    expect(result).toContain('Pipe registry: 1 main, 0 sub(s)')
     expect(result).toContain('## Runtime')
     expect(result).toContain('Daemon:')
     expect(result).toContain('## Remote Control')

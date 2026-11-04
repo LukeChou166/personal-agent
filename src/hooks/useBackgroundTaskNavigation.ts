@@ -66,13 +66,11 @@ function stepTeammateSelection(
  */
 export function useBackgroundTaskNavigation(options?: {
   onOpenBackgroundTasks?: () => void
-  onTogglePipeSelector?: () => void
 }): { handleKeyDown: (e: KeyboardEvent) => void } {
   const tasks = useAppState(s => s.tasks)
   const viewSelectionMode = useAppState(s => s.viewSelectionMode)
   const viewingAgentTaskId = useAppState(s => s.viewingAgentTaskId)
   const selectedIPAgentIndex = useAppState(s => s.selectedIPAgentIndex)
-  const pipeIpc = useAppState(s => s.pipeIpc)
   const setAppState = useSetAppState()
 
   // Filter to running teammates and sort alphabetically to match TeammateSpinnerTree display
@@ -187,13 +185,6 @@ export function useBackgroundTaskNavigation(options?: {
         stepTeammateSelection(e.key === 'down' ? 1 : -1, setAppState)
       } else if (hasNonTeammateBackgroundTasks) {
         options?.onOpenBackgroundTasks?.()
-      } else if (
-        e.key === 'down' &&
-        pipeIpc?.statusVisible &&
-        options?.onTogglePipeSelector
-      ) {
-        // Shift+Down opens pipe selector when pipe IPC is active and no other navigation targets
-        options.onTogglePipeSelector()
       }
       return
     }

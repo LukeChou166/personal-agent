@@ -9,8 +9,7 @@ import {
 } from '../../proactive/index.js'
 
 function isProactiveFeatureEnabled() {
-  if (feature('PROACTIVE')) return true
-  return feature('KAIROS') ? true : false
+  return feature('KAIROS')
 }
 
 describe('handleRemoteInterrupt', () => {

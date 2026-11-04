@@ -928,7 +928,6 @@ export async function applyToolResultBudget(
   writeToTranscript?: (records: ToolResultReplacementRecord[]) => void,
   skipToolNames?: ReadonlySet<string>,
 ): Promise<Message[]> {
-  learninLog('')
   if (!state) return messages
   const result = await enforceToolResultBudget(messages, state, skipToolNames)
   if (result.newlyReplaced.length > 0) {

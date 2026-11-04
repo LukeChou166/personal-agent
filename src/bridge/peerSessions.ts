@@ -20,8 +20,8 @@ export type BridgePeerSession = {
  * addresses when the current process has an active bridge handle.
  */
 export async function listBridgePeers(): Promise<BridgePeerSession[]> {
-  const { listAllLiveSessions } = await import('../utils/udsClient.js')
-  const sessions = await listAllLiveSessions()
+  const { listLiveSessions } = await import('../cli/bg.js')
+  const sessions = await listLiveSessions()
   const peers: BridgePeerSession[] = []
 
   for (const session of sessions) {

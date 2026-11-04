@@ -23,11 +23,10 @@ const SuggestBackgroundPRTool =
     ? require('@claude-code-best/builtin-tools/tools/SuggestBackgroundPRTool/SuggestBackgroundPRTool.js')
         .SuggestBackgroundPRTool
     : null
-const SleepTool =
-  feature('PROACTIVE') || feature('KAIROS')
-    ? require('@claude-code-best/builtin-tools/tools/SleepTool/SleepTool.js')
-        .SleepTool
-    : null
+const SleepTool = feature('KAIROS')
+  ? require('@claude-code-best/builtin-tools/tools/SleepTool/SleepTool.js')
+      .SleepTool
+  : null
 const cronTools = [
   require('@claude-code-best/builtin-tools/tools/ScheduleCronTool/CronCreateTool.js')
     .CronCreateTool,
@@ -123,10 +122,6 @@ const OverflowTestTool = feature('OVERFLOW_TEST_TOOL')
   ? require('@claude-code-best/builtin-tools/tools/OverflowTestTool/OverflowTestTool.js')
       .OverflowTestTool
   : null
-const CtxInspectTool = feature('CONTEXT_COLLAPSE')
-  ? require('@claude-code-best/builtin-tools/tools/CtxInspectTool/CtxInspectTool.js')
-      .CtxInspectTool
-  : null
 const TerminalCaptureTool = feature('TERMINAL_PANEL')
   ? require('@claude-code-best/builtin-tools/tools/TerminalCaptureTool/TerminalCaptureTool.js')
       .TerminalCaptureTool
@@ -149,10 +144,6 @@ const DiscoverSkillsTool = feature('EXPERIMENTAL_SKILL_SEARCH')
 const ReviewArtifactTool = feature('REVIEW_ARTIFACT')
   ? require('@claude-code-best/builtin-tools/tools/ReviewArtifactTool/ReviewArtifactTool.js')
       .ReviewArtifactTool
-  : null
-const ListPeersTool = feature('UDS_INBOX')
-  ? require('@claude-code-best/builtin-tools/tools/ListPeersTool/ListPeersTool.js')
-      .ListPeersTool
   : null
 const WorkflowTool = feature('WORKFLOW_SCRIPTS')
   ? require('./workflow/wiring.js').createWorkflowToolCore()
@@ -249,12 +240,10 @@ export function getAllBaseTools(): Tools {
       ? [TaskCreateTool, TaskGetTool, TaskUpdateTool, TaskListTool]
       : []),
     ...(OverflowTestTool ? [OverflowTestTool] : []),
-    ...(CtxInspectTool ? [CtxInspectTool] : []),
     ...(TerminalCaptureTool ? [TerminalCaptureTool] : []),
     ...(isEnvTruthy(process.env.ENABLE_LSP_TOOL) ? [LSPTool] : []),
     ...(isWorktreeModeEnabled() ? [EnterWorktreeTool, ExitWorktreeTool] : []),
     getSendMessageTool(),
-    ...(ListPeersTool ? [ListPeersTool] : []),
     getTeamCreateTool(),
     getTeamDeleteTool(),
     ...(VerifyPlanExecutionTool ? [VerifyPlanExecutionTool] : []),

@@ -522,8 +522,8 @@ export async function loadConversationForResume(
       let skip = new Set<string>()
       if (feature('BG_SESSIONS')) {
         try {
-          const { listAllLiveSessions } = await import('./udsClient.js')
-          const live = await listAllLiveSessions()
+          const { listLiveSessions } = await import('../cli/bg.js')
+          const live = await listLiveSessions()
           skip = new Set(
             live.flatMap(s =>
               s.kind && s.kind !== 'interactive' && s.sessionId

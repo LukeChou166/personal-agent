@@ -1,7 +1,7 @@
 /**
  * useProactive — React hook that drives tick generation for proactive mode.
  *
- * Mounted inside REPL.tsx when feature('PROACTIVE') || feature('KAIROS').
+ * Mounted inside REPL.tsx when feature('KAIROS').
  * Generates <tick>HH:MM:SS</tick> prompts at a fixed interval while
  * proactive mode is active and not blocked.
  */

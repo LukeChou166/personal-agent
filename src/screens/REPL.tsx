@@ -277,7 +277,6 @@ import { useManagePlugins } from '../hooks/useManagePlugins.js';
 import { Messages } from '../components/Messages.js';
 import { TaskListV2 } from '../components/TaskListV2.js';
 import { TeammateViewHeader } from '../components/TeammateViewHeader.js';
-import { getPipeIpc } from '../utils/pipeTransport.js';
 import { useTasksV2WithCollapseEffect } from '../hooks/useTasksV2.js';
 import { maybeMarkProjectOnboardingComplete } from '../projectOnboardingState.js';
 import type { MCPServerConnection } from '../services/mcp/types.js';
@@ -329,7 +328,6 @@ import {
   type FileHistorySnapshot,
   copyFileHistoryForResume,
   fileHistoryEnabled,
-  fileHistoryHasAnyChanges,
 } from '../utils/fileHistory.js';
 import { type AttributionState, incrementPromptCount } from '../utils/commitAttribution.js';
 import { recordAttributionSnapshot } from '../utils/sessionStorage.js';
@@ -347,34 +345,16 @@ import { BackgroundAgentSelector } from '../components/tasks/BackgroundAgentSele
 import { useInboxPoller } from '../hooks/useInboxPoller.js';
 // Dead code elimination: conditional import for loop mode
 /* eslint-disable @typescript-eslint/no-require-imports */
-const proactiveModule = feature('PROACTIVE') || feature('KAIROS') ? require('../proactive/index.js') : null;
+const proactiveModule = feature('KAIROS') ? require('../proactive/index.js') : null;
 const PROACTIVE_NO_OP_SUBSCRIBE = (_cb: () => void) => () => {};
 const PROACTIVE_FALSE = () => false;
 const PROACTIVE_NULL = (): number | null => null;
 const SUGGEST_BG_PR_NOOP = (_p: string, _n: string): boolean => false;
-const useProactive =
-  feature('PROACTIVE') || feature('KAIROS') ? require('../proactive/useProactive.js').useProactive : null;
+const useProactive = feature('KAIROS') ? require('../proactive/useProactive.js').useProactive : null;
 const useScheduledTasks = feature('AGENT_TRIGGERS') ? require('../hooks/useScheduledTasks.js').useScheduledTasks : null;
 const useGoalContinuation: typeof import('../hooks/useGoalContinuation.js').useGoalContinuation | null = feature('GOAL')
   ? require('../hooks/useGoalContinuation.js').useGoalContinuation
   : null;
-const useMasterMonitor = feature('UDS_INBOX')
-  ? require('../hooks/useMasterMonitor.js').useMasterMonitor
-  : () => undefined;
-const useSlaveNotifications = feature('UDS_INBOX')
-  ? require('../hooks/useSlaveNotifications.js').useSlaveNotifications
-  : () => undefined;
-const usePipeIpc = feature('UDS_INBOX') ? require('../hooks/usePipeIpc.js').usePipeIpc : () => undefined;
-const usePipeRelay = feature('UDS_INBOX')
-  ? require('../hooks/usePipeRelay.js').usePipeRelay
-  : () => ({ relayPipeMessage: () => false, pipeReturnHadErrorRef: { current: false } });
-const usePipePermissionForward = feature('UDS_INBOX')
-  ? require('../hooks/usePipePermissionForward.js').usePipePermissionForward
-  : () => undefined;
-const usePipeMuteSync = feature('UDS_INBOX') ? require('../hooks/usePipeMuteSync.js').usePipeMuteSync : () => undefined;
-const usePipeRouter = feature('UDS_INBOX')
-  ? require('../hooks/usePipeRouter.js').usePipeRouter
-  : () => ({ routeToSelectedPipes: () => false });
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { isAgentSwarmsEnabled } from '../utils/agentSwarmsEnabled.js';
 import { useTaskListWatcher } from '../hooks/useTaskListWatcher.js';
@@ -478,8 +458,6 @@ import {
 } from '../utils/autoRunIssue.js';
 import type { HookProgress } from '../types/hooks.js';
 import { TungstenLiveMonitor } from '@claude-code-best/builtin-tools/tools/TungstenTool/TungstenLiveMonitor.js';
-// WebBrowserPanel removed — browser-lite returns results inline via tool_result.
-// For full browser interaction use Claude-in-Chrome MCP tools.
 import { IssueFlagBanner } from '../components/PromptInput/IssueFlagBanner.js';
 import { useIssueFlagBanner } from '../hooks/useIssueFlagBanner.js';
 import { CompanionSprite, CompanionFloatingBubble, MIN_COLS_FOR_FULL_SPRITE } from '../buddy/CompanionSprite.js';
@@ -487,7 +465,6 @@ import { DevBar } from '../components/DevBar.js';
 import { UltraplanChoiceDialog } from '../components/ultraplan/UltraplanChoiceDialog.js';
 import { UltraplanLaunchDialog } from '../components/ultraplan/UltraplanLaunchDialog.js';
 import { launchUltraplan } from '../commands/ultraplan.js';
-// Session manager removed - using AppState now
 import type { RemoteSessionConfig } from '../remote/RemoteSessionManager.js';
 import { REMOTE_SAFE_COMMANDS } from '../commands.js';
 import type { RemoteMessageContent } from '../utils/teleport/api.js';
@@ -495,15 +472,7 @@ import { FullscreenLayout, useUnseenDivider, computeUnseenDivider } from '../com
 import { isFullscreenEnvEnabled, maybeGetTmuxMouseHint, isMouseTrackingEnabled } from '../utils/fullscreen.js';
 import { AlternateScreen } from '@anthropic/ink';
 import { ScrollKeybindingHandler } from '../components/ScrollKeybindingHandler.js';
-import {
-  useMessageActions,
-  MessageActionsKeybindings,
-  MessageActionsBar,
-  type MessageActionsState,
-  type MessageActionsNav,
-  type MessageActionCaps,
-} from '../components/messageActions.js';
-import { setClipboard } from '@anthropic/ink';
+import { MessageActionsBar, type MessageActionsState, type MessageActionsNav } from '../components/messageActions.js';
 import type { ScrollBoxHandle } from '@anthropic/ink';
 import { createAttachmentMessage, getQueuedCommandAttachments } from '../utils/attachments.js';
 
@@ -897,8 +866,6 @@ export function REPL({
     [],
   );
   const disableVirtualScroll = useMemo(() => isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_VIRTUAL_SCROLL), []);
-  const disableMessageActionsRaw = useMemo(() => isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_MESSAGE_ACTIONS), []);
-  const disableMessageActions = feature('MESSAGE_ACTIONS') ? disableMessageActionsRaw : false;
 
   // Log REPL mount/unmount lifecycle
   useEffect(() => {
@@ -2605,7 +2572,7 @@ export function REPL({
 
     // Pause proactive mode so the user gets control back.
     // It will resume when they submit their next input (see onSubmit).
-    if (feature('PROACTIVE') || feature('KAIROS')) {
+    if (feature('KAIROS')) {
       proactiveModule?.pauseProactive();
     }
 
@@ -2917,15 +2884,6 @@ export function REPL({
 
   const canUseTool = useCanUseTool(setToolUseConfirmQueue, setToolPermissionContext);
 
-  const requestPrompt = useCallback(
-    (title: string, toolInputSummary?: string | null) =>
-      (request: PromptRequest): Promise<PromptResponse> =>
-        new Promise<PromptResponse>((resolve, reject) => {
-          setPromptQueue(prev => [...prev, { request, title, toolInputSummary, resolve, reject }]);
-        }),
-    [],
-  );
-
   const getToolUseContext = useCallback(
     (
       messages: MessageType[],
@@ -3061,7 +3019,6 @@ export function REPL({
         },
         resume,
         setConversationId,
-        requestPrompt: feature('HOOK_PROMPTS') ? requestPrompt : undefined,
         contentReplacementState: contentReplacementStateRef.current,
       };
     },
@@ -3082,7 +3039,6 @@ export function REPL({
       setMessages,
       onChangeDynamicMcpConfig,
       resume,
-      requestPrompt,
       disabled,
       customSystemPrompt,
       appendSystemPrompt,
@@ -3220,7 +3176,7 @@ export function REPL({
             // stale memoized rows remount with post-compact content.
             setConversationId(randomUUID());
             // Compaction succeeded — clear the context-blocked flag so ticks resume
-            if (feature('PROACTIVE') || feature('KAIROS')) {
+            if (feature('KAIROS')) {
               proactiveModule?.setContextBlocked(false);
             }
           } else if (
@@ -3261,7 +3217,7 @@ export function REPL({
           // Block ticks on API errors to prevent tick → error → tick
           // runaway loops (e.g., auth failure, rate limit, blocking limit).
           // Cleared on compact boundary (above) or successful response (below).
-          if (feature('PROACTIVE') || feature('KAIROS')) {
+          if (feature('KAIROS')) {
             if (newMessage.type === 'assistant' && 'isApiErrorMessage' in newMessage && newMessage.isApiErrorMessage) {
               proactiveModule?.setContextBlocked(true);
             } else if (newMessage.type === 'assistant') {
@@ -3303,34 +3259,6 @@ export function REPL({
                   priority: 'immediate',
                 });
               }
-            }
-          }
-          // Relay assistant response to master when in slave mode.
-          if (feature('UDS_INBOX') && newMessage.type === 'assistant') {
-            // Extract text from content blocks (API format)
-            const msg = newMessage.message as any;
-            const contentBlocks = msg?.content ?? (newMessage as any).content ?? [];
-            const textParts: string[] = [];
-            if (Array.isArray(contentBlocks)) {
-              for (const block of contentBlocks) {
-                if (typeof block === 'string') {
-                  textParts.push(block);
-                } else if (block?.type === 'text' && block.text) {
-                  textParts.push(block.text);
-                }
-              }
-            } else if (typeof contentBlocks === 'string') {
-              textParts.push(contentBlocks);
-            }
-            const text = textParts.join('\n').trim();
-            if ('isApiErrorMessage' in newMessage && newMessage.isApiErrorMessage) {
-              pipeReturnHadErrorRef.current = true;
-              relayPipeMessage({
-                type: 'error',
-                data: text || 'Slave request failed',
-              });
-            } else if (text) {
-              relayPipeMessage({ type: 'stream', data: text });
             }
           }
         },
@@ -3473,7 +3401,7 @@ export function REPL({
           // Bump conversationId so Messages.tsx row keys change and
           // stale memoized rows remount with post-compact content.
           setConversationId(randomUUID());
-          if (feature('PROACTIVE') || feature('KAIROS')) {
+          if (feature('KAIROS')) {
             proactiveModule?.setContextBlocked(false);
           }
         }
@@ -3530,9 +3458,7 @@ export function REPL({
       const userContext = {
         ...baseUserContext,
         ...getCoordinatorUserContext(freshMcpClients, isScratchpadEnabled() ? getScratchpadDir() : undefined),
-        ...((feature('PROACTIVE') || feature('KAIROS')) &&
-        proactiveModule?.isProactiveActive() &&
-        !terminalFocusRef.current
+        ...(feature('KAIROS') && proactiveModule?.isProactiveActive() && !terminalFocusRef.current
           ? {
               terminalFocus: 'The terminal is unfocused \u2014 the user is not actively watching.',
             }
@@ -3597,15 +3523,6 @@ export function REPL({
 
       queryCheckpoint('query_end');
       learningLog('REPL.tsx.query_end');
-      if (feature('UDS_INBOX')) {
-        if (abortController.signal.aborted) {
-          pipeReturnHadErrorRef.current = true;
-          relayPipeMessage({
-            type: 'error',
-            data: 'Slave request was interrupted before completion.',
-          });
-        }
-      }
 
       // Capture ant-only API metrics before resetLoadingState clears the ref.
       // For multi-request turns (tool use loops), compute P50 across all requests.
@@ -3718,7 +3635,6 @@ export function REPL({
       }
 
       try {
-        pipeReturnHadErrorRef.current = false;
         setWasAborted(false);
         // isLoading is derived from queryGuard — tryStart() above already
         // transitioned dispatching→running, so no setter call needed here.
@@ -3752,27 +3668,16 @@ export function REPL({
           }
         }
 
-        try {
-          learningLog('repl.onQuery mainLoopModelParam');
-          await onQueryImpl(
-            latestMessages,
-            newMessages,
-            abortController,
-            shouldQuery,
-            additionalAllowedTools,
-            mainLoopModelParam,
-            effort,
-          );
-        } catch (error) {
-          if (feature('UDS_INBOX')) {
-            pipeReturnHadErrorRef.current = true;
-            relayPipeMessage({
-              type: 'error',
-              data: error instanceof Error ? error.message : String(error),
-            });
-          }
-          throw error;
-        }
+        learningLog('repl.onQuery mainLoopModelParam');
+        await onQueryImpl(
+          latestMessages,
+          newMessages,
+          abortController,
+          shouldQuery,
+          additionalAllowedTools,
+          mainLoopModelParam,
+          effort,
+        );
       } finally {
         // queryGuard.end() atomically checks generation and transitions
         // running→idle. Returns false if a newer query owns the guard
@@ -3787,13 +3692,6 @@ export function REPL({
           resetLoadingState();
 
           await mrOnTurnComplete(messagesRef.current, abortController.signal.aborted);
-
-          if (feature('UDS_INBOX') && !pipeReturnHadErrorRef.current) {
-            relayPipeMessage({
-              type: 'done',
-              data: '',
-            });
-          }
 
           // Notify bridge clients that the turn is complete so mobile apps
           // can stop the spark animation and show post-turn UI.
@@ -4049,29 +3947,8 @@ export function REPL({
       repinScroll();
 
       // Resume loop mode if paused
-      if (feature('PROACTIVE') || feature('KAIROS')) {
+      if (feature('KAIROS')) {
         proactiveModule?.resumeProactive();
-      }
-
-      // Route user input to selected pipe targets (extracted to usePipeRouter)
-      if (routeToSelectedPipes(input)) {
-        // Show the user's prompt in the message list so they can see what was sent
-        const userMessage = createUserMessage({ content: input });
-        setMessages(prev => [...prev, userMessage]);
-
-        if (!options?.fromKeybinding) {
-          addToHistory({
-            display: prependModeCharacterToInput(input, inputMode),
-            pastedContents,
-          });
-        }
-        setInputValue('');
-        helpers.setCursorOffset(0);
-        helpers.clearBuffer();
-        setPastedContents({});
-        setInputMode('prompt');
-        setIDESelection(undefined);
-        return;
       }
 
       // Handle immediate commands - these bypass the queue and execute right away
@@ -4652,19 +4529,6 @@ export function REPL({
       // Reset cached microcompact state so stale pinned cache edits
       // don't reference tool_use_ids from truncated messages
       resetMicrocompactState();
-      if (feature('CONTEXT_COLLAPSE')) {
-        // Rewind truncates the REPL array. Commits whose archived span
-        // was past the rewind point can't be projected anymore
-        // (projectView silently skips them) but the staged queue and ID
-        // maps reference stale uuids. Simplest safe reset: drop
-        // everything. The ctx-agent will re-stage on the next
-        // threshold crossing.
-        /* eslint-disable @typescript-eslint/no-require-imports */
-        (
-          require('../services/contextCollapse/index.js') as typeof import('../services/contextCollapse/index.js')
-        ).resetContextCollapse();
-        /* eslint-enable @typescript-eslint/no-require-imports */
-      }
 
       // Restore state from the message we're rewinding to
       const permMode = message.permissionMode as InternalPermissionMode | undefined;
@@ -4736,52 +4600,6 @@ export function REPL({
       setImmediate((restore, message) => restore(message), restoreMessageSync, message);
     },
     [restoreMessageSync],
-  );
-
-  // Not memoized — hook stores caps via ref, reads latest closure at dispatch.
-  // 24-char prefix: deriveUUID preserves first 24, renderable uuid prefix-matches raw source.
-  const findRawIndex = (uuid: string) => {
-    const prefix = uuid.slice(0, 24);
-    return messages.findIndex(m => m.uuid.slice(0, 24) === prefix);
-  };
-  const messageActionCaps: MessageActionCaps = {
-    copy: text =>
-      // setClipboard RETURNS OSC 52 — caller must stdout.write (tmux side-effects load-buffer, but that's tmux-only).
-      void setClipboard(text).then(raw => {
-        if (raw) process.stdout.write(raw);
-        addNotification({
-          // Same key as text-selection copy — repeated copies replace toast, don't queue.
-          key: 'selection-copied',
-          text: 'copied',
-          color: 'success',
-          priority: 'immediate',
-          timeoutMs: 2000,
-        });
-      }),
-    edit: async msg => {
-      // Same skip-confirm check as /rewind: lossless → direct, else confirm dialog.
-      const rawIdx = findRawIndex(msg.uuid);
-      const raw = rawIdx >= 0 ? messages[rawIdx] : undefined;
-      if (!raw || !selectableUserMessagesFilter(raw)) return;
-      const noFileChanges = !(await fileHistoryHasAnyChanges(fileHistory, raw.uuid));
-      const onlySynthetic = messagesAfterAreOnlySynthetic(messages, rawIdx);
-      if (noFileChanges && onlySynthetic) {
-        // rewindConversationTo's setMessages races stream appends — cancel first (idempotent).
-        onCancel();
-        // handleRestoreMessage also restores pasted images.
-        void handleRestoreMessage(raw);
-      } else {
-        // Dialog path: onPreRestore (= onCancel) fires when user CONFIRMS, not on nevermind.
-        setMessageSelectorPreselect(raw);
-        setIsMessageSelectorVisible(true);
-      }
-    },
-  };
-  const { enter: enterMessageActions, handlers: messageActionHandlers } = useMessageActions(
-    cursor,
-    setCursor,
-    cursorNavRef,
-    messageActionCaps,
   );
 
   async function onInit() {
@@ -5124,8 +4942,6 @@ export function REPL({
     [onQuery, mainLoopModel, store],
   );
 
-  const { relayPipeMessage, pipeReturnHadErrorRef } = usePipeRelay();
-
   // Voice input integration (VOICE_MODE builds only)
   const voiceIntegrationResult = useVoiceIntegration({ setInputValueRaw, inputValueRef, insertTextRef });
   const voice = feature('VOICE_MODE')
@@ -5145,16 +4961,6 @@ export function REPL({
   });
 
   useMailboxBridge({ isLoading, onSubmitMessage: handleIncomingPrompt });
-  useMasterMonitor();
-  useSlaveNotifications();
-  const _pipeIpcState = useAppState(s => getPipeIpc(s));
-
-  usePipePermissionForward({ store, tools, setMessages, setToolUseConfirmQueue, getToolUseContext, mainLoopModel });
-  usePipeMuteSync({ setToolUseConfirmQueue });
-
-  // Pipe IPC lifecycle — extracted to usePipeIpc hook
-  usePipeIpc({ store, handleIncomingPrompt });
-  const { routeToSelectedPipes } = usePipeRouter({ store, setAppState, addNotification });
 
   // Scheduled tasks from .claude/scheduled_tasks.json (CronCreate/Delete/List)
   if (feature('AGENT_TRIGGERS')) {
@@ -5581,15 +5387,8 @@ export function REPL({
   // Handle shift+down for teammate navigation and background task management.
   // Guard onOpenBackgroundTasks when a local-jsx dialog (e.g. /mcp) is open —
   // otherwise Shift+Down stacks BackgroundTasksDialog on top and deadlocks input.
-  // Third case: Shift+Down toggles the pipe IPC selector panel when pipes are active.
   useBackgroundTaskNavigation({
     onOpenBackgroundTasks: isShowingLocalJSXCommand ? undefined : () => setShowBashesDialog(true),
-    onTogglePipeSelector: () => {
-      setAppState((prev: any) => {
-        const pIpc = prev.pipeIpc ?? {};
-        return { ...prev, pipeIpc: { ...pIpc, selectorOpen: !pIpc.selectorOpen } };
-      });
-    },
   });
   // Auto-exit viewing mode when teammate completes or errors
   useTeammateViewAutoExit();
@@ -5949,9 +5748,6 @@ export function REPL({
         }
         onScroll={composedOnScroll}
       />
-      {feature('MESSAGE_ACTIONS') && isFullscreenEnvEnabled() && !disableMessageActions ? (
-        <MessageActionsKeybindings handlers={messageActionHandlers} isActive={cursor !== null} />
-      ) : null}
       <CancelRequestHandler {...cancelRequestProps} />
       <MCPConnectionManager key={remountKey} dynamicMcpConfig={dynamicMcpConfig} isStrictMcpConfig={strictMcpConfig}>
         <FullscreenLayout
@@ -6015,7 +5811,6 @@ export function REPL({
                 </Box>
               )}
               {process.env.USER_TYPE === 'ant' && <TungstenLiveMonitor />}
-              {/* WebBrowserPanel removed — browser-lite, no panel */}
               <Box flexGrow={1} />
               {showSpinner && (
                 <SpinnerWithVerb
@@ -6575,12 +6370,6 @@ export function REPL({
                       setStashedPrompt={setStashedPrompt}
                       submitCount={submitCount}
                       onShowMessageSelector={handleShowMessageSelector}
-                      onMessageActionsEnter={
-                        // Works during isLoading — edit cancels first; uuid selection survives appends.
-                        feature('MESSAGE_ACTIONS') && isFullscreenEnvEnabled() && !disableMessageActions
-                          ? enterMessageActions
-                          : undefined
-                      }
                       mcpClients={mcpClients}
                       pastedContents={pastedContents}
                       setPastedContents={setPastedContents}
@@ -6703,7 +6492,7 @@ export function REPL({
                       }
                       // Partial compact bypasses handleMessageFromStream — clear
                       // the context-blocked flag so proactive ticks resume.
-                      if (feature('PROACTIVE') || feature('KAIROS')) {
+                      if (feature('KAIROS')) {
                         proactiveModule?.setContextBlocked(false);
                       }
                       setConversationId(randomUUID());

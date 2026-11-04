@@ -367,10 +367,9 @@ import { isExtractModeActive } from '../memdir/paths.js'
 const coordinatorModeModule = feature('COORDINATOR_MODE')
   ? (require('../coordinator/coordinatorMode.js') as typeof import('../coordinator/coordinatorMode.js'))
   : null
-const proactiveModule =
-  feature('PROACTIVE') || feature('KAIROS')
-    ? (require('../proactive/index.js') as typeof import('../proactive/index.js'))
-    : null
+const proactiveModule = feature('KAIROS')
+  ? (require('../proactive/index.js') as typeof import('../proactive/index.js'))
+  : null
 const cronSchedulerModule =
   require('../utils/cronScheduler.js') as typeof import('../utils/cronScheduler.js')
 const cronJitterConfigModule =
@@ -539,7 +538,7 @@ export async function runHeadless(
   // where CLAUDE_CODE_PROACTIVE is set but main.tsx's check didn't fire
   // (e.g. env was injected by the SDK transport after argv parsing).
   if (
-    (feature('PROACTIVE') || feature('KAIROS')) &&
+    feature('KAIROS') &&
     proactiveModule &&
     !proactiveModule.isProactiveActive() &&
     isEnvTruthy(process.env.CLAUDE_CODE_PROACTIVE)
@@ -1864,46 +1863,45 @@ function runHeadlessStreaming(
   // Proactive mode: schedule a tick to keep the model looping autonomously.
   // setTimeout(0) yields to the event loop so pending stdin messages
   // (interrupts, user messages) are processed before the tick fires.
-  const scheduleProactiveTick =
-    feature('PROACTIVE') || feature('KAIROS')
-      ? () => {
-          setTimeout(() => {
-            if (
-              !proactiveModule?.isProactiveActive() ||
-              proactiveModule.isProactivePaused() ||
-              inputClosed
-            ) {
+  const scheduleProactiveTick = feature('KAIROS')
+    ? () => {
+        setTimeout(() => {
+          if (
+            !proactiveModule?.isProactiveActive() ||
+            proactiveModule.isProactivePaused() ||
+            inputClosed
+          ) {
+            return
+          }
+          void (async () => {
+            const commands = await createProactiveAutonomyCommands({
+              basePrompt: `<${TICK_TAG}>${new Date().toLocaleTimeString()}</${TICK_TAG}>`,
+              currentDir: cwd(),
+              shouldCreate: () => !inputClosed,
+            })
+            if (inputClosed) {
+              await cancelQueuedAutonomyCommands({ commands })
               return
             }
-            void (async () => {
-              const commands = await createProactiveAutonomyCommands({
-                basePrompt: `<${TICK_TAG}>${new Date().toLocaleTimeString()}</${TICK_TAG}>`,
-                currentDir: cwd(),
-                shouldCreate: () => !inputClosed,
+            for (const command of commands) {
+              enqueue({
+                ...command,
+                uuid: randomUUID(),
               })
-              if (inputClosed) {
-                await cancelQueuedAutonomyCommands({ commands })
-                return
-              }
-              for (const command of commands) {
-                enqueue({
-                  ...command,
-                  uuid: randomUUID(),
-                })
-              }
-              void run()
-            })().catch(error => {
-              logError(error)
-              logForDebugging(
-                `[Proactive] failed to create headless tick: ${error}`,
-                {
-                  level: 'error',
-                },
-              )
-            })
-          }, 0)
-        }
-      : undefined
+            }
+            void run()
+          })().catch(error => {
+            logError(error)
+            logForDebugging(
+              `[Proactive] failed to create headless tick: ${error}`,
+              {
+                level: 'error',
+              },
+            )
+          })
+        }, 0)
+      }
+    : undefined
 
   // Abort the current operation when a 'now' priority message arrives.
   subscribeToCommandQueue(() => {
@@ -2584,7 +2582,7 @@ function runHeadlessStreaming(
 
     // Proactive tick: if proactive is active and queue is empty, inject a tick
     if (
-      (feature('PROACTIVE') || feature('KAIROS')) &&
+      feature('KAIROS') &&
       proactiveModule?.isProactiveActive() &&
       !proactiveModule.isProactivePaused()
     ) {
@@ -2787,43 +2785,6 @@ function runHeadlessStreaming(
         statusListeners.delete(rateLimitListener)
         output.done()
       }
-    }
-  }
-
-  // Set up UDS inbox callback so the query loop is kicked off
-  // when a message arrives via the UDS socket in headless mode.
-  if (feature('UDS_INBOX')) {
-    /* eslint-disable @typescript-eslint/no-require-imports */
-    const { drainInbox, setOnEnqueue } =
-      require('../utils/udsMessaging.js') as typeof import('../utils/udsMessaging.js')
-    /* eslint-enable @typescript-eslint/no-require-imports */
-
-    const enqueueUdsInboxMessages = (): boolean => {
-      const entries = drainInbox()
-      for (const entry of entries) {
-        const value =
-          typeof entry.message.data === 'string'
-            ? entry.message.data
-            : jsonStringify(entry.message.data)
-        enqueue({
-          mode: 'prompt',
-          value,
-          uuid: randomUUID(),
-        })
-      }
-      return entries.length > 0
-    }
-
-    setOnEnqueue(() => {
-      if (!inputClosed) {
-        if (enqueueUdsInboxMessages()) {
-          void run()
-        }
-      }
-    })
-
-    if (enqueueUdsInboxMessages()) {
-      void run()
     }
   }
 
@@ -4087,7 +4048,7 @@ function runHeadlessStreaming(
             }
           })()
         } else if (
-          (feature('PROACTIVE') || feature('KAIROS')) &&
+          feature('KAIROS') &&
           (msg.request as { subtype: string }).subtype === 'set_proactive'
         ) {
           const req = msg.request as unknown as {

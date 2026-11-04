@@ -18,7 +18,7 @@ const proactive = {
   name: 'proactive',
   description: 'Toggle proactive (autonomous) mode',
   isEnabled: () => {
-    if (feature('PROACTIVE') || feature('KAIROS')) {
+    if (feature('KAIROS')) {
       return true
     }
     return false

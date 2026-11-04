@@ -23,7 +23,7 @@ type SleepInput = z.infer<InputSchema>
 type SleepOutput = { slept_seconds: number; interrupted: boolean }
 
 function isProactiveAutomationEnabled(): boolean {
-  if (!(feature('PROACTIVE') || feature('KAIROS'))) {
+  if (!feature('KAIROS')) {
     return false
   }
 
@@ -33,7 +33,7 @@ function isProactiveAutomationEnabled(): boolean {
 }
 
 function isProactiveSleepAllowed(): boolean {
-  if (!(feature('PROACTIVE') || feature('KAIROS'))) {
+  if (!feature('KAIROS')) {
     return true
   }
 

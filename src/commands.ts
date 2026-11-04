@@ -64,10 +64,9 @@ import webTools from './commands/web-tools/index.js'
 import { feature } from 'bun:bundle'
 // Dead code elimination: conditional imports
 /* eslint-disable @typescript-eslint/no-require-imports */
-const proactive =
-  feature('PROACTIVE') || feature('KAIROS')
-    ? require('./commands/proactive.js').default
-    : null
+const proactive = feature('KAIROS')
+  ? require('./commands/proactive.js').default
+  : null
 const briefCommand =
   feature('KAIROS') || feature('KAIROS_BRIEF')
     ? require('./commands/brief.js').default
@@ -121,32 +120,6 @@ const daemonCmd =
     : null
 const jobCmd = feature('TEMPLATES')
   ? require('./commands/job/index.js').default
-  : null
-const peersCmd = feature('UDS_INBOX')
-  ? (
-      require('./commands/peers/index.js') as typeof import('./commands/peers/index.js')
-    ).default
-  : null
-const attachCmd = feature('UDS_INBOX')
-  ? require('./commands/attach/index.js').default
-  : null
-const detachCmd = feature('UDS_INBOX')
-  ? require('./commands/detach/index.js').default
-  : null
-const sendCmd = feature('UDS_INBOX')
-  ? require('./commands/send/index.js').default
-  : null
-const pipesCmd = feature('UDS_INBOX')
-  ? require('./commands/pipes/index.js').default
-  : null
-const pipeStatusCmd = feature('UDS_INBOX')
-  ? require('./commands/pipe-status/index.js').default
-  : null
-const historyCmd = feature('UDS_INBOX')
-  ? require('./commands/history/index.js').default
-  : null
-const claimMainCmd = feature('UDS_INBOX')
-  ? require('./commands/claim-main/index.js').default
   : null
 const forkCmd = feature('FORK_SUBAGENT')
   ? (
@@ -394,14 +367,6 @@ const COMMANDS = memoize((): Command[] => [
   sandboxToggle,
   ...(!isUsing3PServices() ? [logout, login()] : []),
   passes,
-  ...(peersCmd ? [peersCmd] : []),
-  ...(attachCmd ? [attachCmd] : []),
-  ...(detachCmd ? [detachCmd] : []),
-  ...(sendCmd ? [sendCmd] : []),
-  ...(pipesCmd ? [pipesCmd] : []),
-  ...(pipeStatusCmd ? [pipeStatusCmd] : []),
-  ...(historyCmd ? [historyCmd] : []),
-  ...(claimMainCmd ? [claimMainCmd] : []),
   tasks,
   ...(workflowsCmd ? [workflowsCmd] : []),
   ...(ultraplan ? [ultraplan] : []),

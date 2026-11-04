@@ -63,7 +63,6 @@ export async function setup(
   tmuxEnabled: boolean,
   customSessionId?: string | null,
   worktreePRNumber?: number,
-  messagingSocketPath?: string,
 ): Promise<void> {
   logForDiagnosticsNoPII('info', 'setup_started')
 
@@ -81,34 +80,6 @@ export async function setup(
   // Set custom session ID if provided
   if (customSessionId) {
     switchSession(asSessionId(customSessionId))
-  }
-
-  // --bare / SIMPLE: skip UDS messaging server and teammate snapshot.
-  // Scripted calls don't receive injected messages and don't use swarm teammates.
-  // Explicit --messaging-socket-path is the escape hatch (per #23222 gate pattern).
-  if (!isBareMode() || messagingSocketPath !== undefined) {
-    // Start UDS messaging server (Mac/Linux only).
-    // Enabled by default for ants — creates a socket in tmpdir if no
-    // --messaging-socket-path is passed. Awaited so the server is bound
-    // and $CLAUDE_CODE_MESSAGING_SOCKET is exported before any hook
-    // (SessionStart in particular) can spawn and snapshot process.env.
-    if (feature('UDS_INBOX')) {
-      const m = await import('./utils/udsMessaging.js')
-      try {
-        await m.startUdsMessaging(
-          messagingSocketPath ?? m.getDefaultUdsSocketPath(),
-          { isExplicit: messagingSocketPath !== undefined },
-        )
-      } catch (error) {
-        logError(error)
-        console.error(
-          chalk.red(
-            `Error: Failed to start messaging socket (UDS_INBOX): ${errorMessage(error)}`,
-          ),
-        )
-        process.exit(1)
-      }
-    }
   }
 
   // Teammate snapshot — SIMPLE-only gate (no escape hatch, swarm not used in bare)
@@ -297,13 +268,6 @@ export async function setup(
   if (!isBareMode()) {
     initSessionMemory() // Synchronous - registers hook, gate check happens lazily
     initSkillLearning() // Synchronous - registers hook, gate check happens lazily
-    if (feature('CONTEXT_COLLAPSE')) {
-      /* eslint-disable @typescript-eslint/no-require-imports */
-      ;(
-        require('./services/contextCollapse/index.js') as typeof import('./services/contextCollapse/index.js')
-      ).initContextCollapse()
-      /* eslint-enable @typescript-eslint/no-require-imports */
-    }
   }
   void lockCurrentVersion() // Lock current version to prevent deletion by other processes
   logForDiagnosticsNoPII('info', 'setup_background_jobs_launched')

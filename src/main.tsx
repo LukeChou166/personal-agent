@@ -2404,9 +2404,6 @@ async function run(): Promise<CommanderCommand> {
       logForDebugging('[STARTUP] Running setup()...');
       const setupStart = Date.now();
       const { setup } = await import('./setup.js');
-      const messagingSocketPath = feature('UDS_INBOX')
-        ? (options as { messagingSocketPath?: string }).messagingSocketPath
-        : undefined;
       // Parallelize setup() with commands+agents loading. setup()'s ~28ms is
       // mostly startUdsMessaging (socket bind, ~20ms) — not disk-bound, so it
       // doesn't contend with getCommands' file reads. Gated on !worktreeEnabled
@@ -2430,7 +2427,6 @@ async function run(): Promise<CommanderCommand> {
         tmuxEnabled,
         sessionId ? validateUuid(sessionId) : undefined,
         worktreePRNumber,
-        messagingSocketPath,
       );
       const commandsPromise = worktreeEnabled ? null : getCommands(preSetupCwd);
       const agentDefsPromise = worktreeEnabled ? null : getAgentDefinitionsWithOverrides(preSetupCwd);
@@ -2449,11 +2445,6 @@ async function run(): Promise<CommanderCommand> {
       // Callers who inject and also want those injections visible in the
       // stream pass --messaging-socket-path explicitly (or --replay-user-messages).
       let effectiveReplayUserMessages = !!options.replayUserMessages;
-      if (feature('UDS_INBOX')) {
-        if (!effectiveReplayUserMessages && outputFormat === 'stream-json') {
-          effectiveReplayUserMessages = !!(options as { messagingSocketPath?: string }).messagingSocketPath;
-        }
-      }
 
       if (getIsNonInteractiveSession()) {
         // Apply full merged settings env now (including project-scoped
@@ -2742,7 +2733,7 @@ async function run(): Promise<CommanderCommand> {
       // the generic proactive prompt would tell it to call a tool it can't
       // access and conflict with delegation instructions.
       if (
-        (feature('PROACTIVE') || feature('KAIROS')) &&
+        feature('KAIROS') &&
         ((options as { proactive?: boolean }).proactive || isEnvTruthy(process.env.CLAUDE_CODE_PROACTIVE)) &&
         !coordinatorModeModule?.isCoordinatorMode()
       ) {
@@ -4555,17 +4546,8 @@ async function run(): Promise<CommanderCommand> {
     program.addOption(new Option('--enable-auto-mode', 'Opt in to auto mode').hideHelp());
   }
 
-  if (feature('PROACTIVE') || feature('KAIROS')) {
+  if (feature('KAIROS')) {
     program.addOption(new Option('--proactive', 'Start in proactive autonomous mode'));
-  }
-
-  if (feature('UDS_INBOX')) {
-    program.addOption(
-      new Option(
-        '--messaging-socket-path <path>',
-        'Unix domain socket path for the UDS messaging server (defaults to a tmp path)',
-      ),
-    );
   }
 
   if (feature('KAIROS') || feature('KAIROS_BRIEF')) {
@@ -5609,7 +5591,7 @@ async function logTenguInit({
 
 function maybeActivateProactive(options: unknown): void {
   if (
-    (feature('PROACTIVE') || feature('KAIROS')) &&
+    feature('KAIROS') &&
     ((options as { proactive?: boolean }).proactive || isEnvTruthy(process.env.CLAUDE_CODE_PROACTIVE))
   ) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports

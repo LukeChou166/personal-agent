@@ -27,11 +27,6 @@ import {
   setYoloClassifierApproval,
 } from '../../../utils/classifierApprovals.js'
 import { errorMessage } from '../../../utils/errors.js'
-import {
-  forgetPipePermissionRequest,
-  notifyPipePermissionCancel,
-  tryRelayPipePermissionRequest,
-} from '../../../utils/pipePermissionRelay.js'
 import type { PermissionDecision } from '../../../utils/permissions/PermissionResult.js'
 import type { PermissionUpdate } from '../../../utils/permissions/PermissionUpdateSchema.js'
 import { hasPermissionsToUseTool } from '../../../utils/permissions/permissions.js'
@@ -163,18 +158,8 @@ function handleInteractivePermission(
 
   const permissionPromptStartTimeMs = Date.now()
   const displayInput = result.updatedInput ?? ctx.input
-  let pipePermissionRequestId: string | null = null
 
-  function forgetPipePermission(reason?: string): void {
-    notifyPipePermissionCancel(pipePermissionRequestId, reason)
-    forgetPipePermissionRequest(pipePermissionRequestId)
-    pipePermissionRequestId = null
-  }
-
-  function forgetPipePermissionSilently(): void {
-    forgetPipePermissionRequest(pipePermissionRequestId)
-    pipePermissionRequestId = null
-  }
+  function forgetPipePermission(_reason?: string): void {}
 
   function clearClassifierIndicator(): void {
     if (feature('BASH_CLASSIFIER')) {
@@ -329,63 +314,6 @@ function handleInteractivePermission(
   }
 
   ctx.pushToQueue(toolUseConfirm)
-  pipePermissionRequestId = tryRelayPipePermissionRequest(
-    toolUseConfirm,
-    response => {
-      if (!claim()) return
-      forgetPipePermissionSilently()
-      clearClassifierChecking(ctx.toolUseID)
-      clearClassifierIndicator()
-      ctx.removeFromQueue()
-      channelUnsubscribe?.()
-      if (bridgeCallbacks && bridgeRequestId) {
-        bridgeCallbacks.cancelRequest(bridgeRequestId)
-      }
-
-      if (response.behavior === 'allow') {
-        void (async () => {
-          if (response.permissionUpdates?.length) {
-            void ctx.persistPermissions(response.permissionUpdates)
-          }
-          ctx.logDecision(
-            {
-              decision: 'accept',
-              source: {
-                type: 'user',
-                permanent: !!response.permissionUpdates?.length,
-              },
-            },
-            { permissionPromptStartTimeMs },
-          )
-          resolveOnce(
-            ctx.buildAllow(response.updatedInput ?? displayInput, {
-              acceptFeedback: response.feedback,
-              contentBlocks: response.contentBlocks,
-            }),
-          )
-        })()
-      } else {
-        ctx.logDecision(
-          {
-            decision: 'reject',
-            source: {
-              type: 'user_reject',
-              hasFeedback: !!response.feedback,
-            },
-          },
-          { permissionPromptStartTimeMs },
-        )
-        resolveOnce(
-          ctx.cancelAndAbort(
-            response.feedback,
-            undefined,
-            response.contentBlocks,
-          ),
-        )
-      }
-    },
-  )
-
   // Race 4: Bridge permission response from CCR (claude.ai)
   // When the bridge is connected, send the permission request to CCR and
   // subscribe for a response. Whichever side (CLI or CCR) responds first
