@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
-"""Spec Kit auto-CR hook.
+"""Spec Kit 自动创建 CR 的钩子。
 
-Commits the staged feature changes, pushes a feature branch, and returns a
-review/diff link:
+提交本批次改动的文件、推送特性分支，并返回评审/diff 链接：
 
-- With GITHUB_TOKEN / GH_TOKEN: opens a pull request via the GitHub API.
-- Without a token: returns the GitHub compare URL (diff + "create PR" page).
-- If push fails, the local commit is kept and the error is reported; no link
-  is fabricated.
+- 有 GITHUB_TOKEN / GH_TOKEN：通过 GitHub API 创建 PR。
+- 没有 token：返回 GitHub compare 链接（可直接看 diff 并一键创建 PR）。
+- 推送失败：保留本地提交并原样报错，绝不伪造链接。
 
-Safety: never force-pushes, never touches unrelated paths, never rewrites
-history, and never runs `git commit` when nothing is staged.
+安全约束：不 force push、不提交无关路径、不改写历史、
+没有可提交内容时不执行 `git commit`。
 """
 
 from __future__ import annotations
@@ -81,7 +79,7 @@ def ensure_branch(base: str, branch: str) -> str:
         git("switch", "-c", branch)
         return branch
     if current != branch:
-        # Never switch away from a user's working branch silently.
+        # 不要静默切走用户当前的工作分支。
         raise AutoCrError(
             f"current branch is '{current}', expected base '{base}' or feature branch '{branch}'"
         )
@@ -89,7 +87,7 @@ def ensure_branch(base: str, branch: str) -> str:
 
 
 def filter_ignored(paths: list[str]) -> list[str]:
-    """Drop paths ignored by git so `git add` does not abort the whole batch."""
+    """剔除被 git 忽略的路径，避免 `git add` 整批失败。"""
     if not paths:
         return []
     proc = subprocess.run(
@@ -119,7 +117,7 @@ def staged_paths(paths: list[str]) -> list[str]:
 
 
 def preview_paths(paths: list[str]) -> list[str]:
-    """Dry-run helper: list candidate files without touching the index."""
+    """干跑辅助：只列出候选文件，不改动暂存区。"""
     paths = filter_ignored(paths)
     if not paths:
         return []
@@ -142,7 +140,7 @@ def parse_remote(url: str) -> tuple[str, str] | None:
 
 
 def git_credential_token() -> str | None:
-    """Read a GitHub token from the configured git credential helper."""
+    """从已配置的 git 凭据助手读取 GitHub token。"""
     try:
         proc = subprocess.run(
             ["git", "credential", "fill"],
@@ -238,7 +236,7 @@ def main() -> int:
     if args.feature_dir:
         paths.append(args.feature_dir)
     if args.from_hook and not paths:
-        # The implement step can declare the batch's files instead of staging.
+        # 执行实现步骤时可以直接声明本批文件，而不必先 git add。
         paths = os.environ.get("SPECIFY_CR_PATHS", "").split()
 
     result: dict[str, object] = {
@@ -277,8 +275,8 @@ def main() -> int:
         else:
             ensure_branch(base, branch)
             message = args.message or f"feat: {feature} (auto CR)"
-            # Pathspec-limited commit: previously staged unrelated files stay
-            # staged and out of this commit.
+            # 带 pathspec 的提交：此前暂存的无关文件仍留在暂存区，
+            # 不会进入本次提交。
             if paths:
                 git("commit", "-m", message, "--", *filter_ignored(paths))
             else:
@@ -297,7 +295,7 @@ def main() -> int:
                 result.update({"status": "push_failed", "error": str(exc)[:500]})
                 print(json.dumps(result, ensure_ascii=False, indent=2))
                 return 1
-            # A stale http.proxy is a common local failure; retry once direct.
+            # 本地 http.proxy 失效是常见故障；改为直连重试一次。
             try:
                 git("push", "-u", "origin", branch, direct=True)
             except AutoCrError as retry_exc:

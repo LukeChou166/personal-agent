@@ -7,7 +7,7 @@ type Sources = Array<{ source: SettingSource; settings: SettingsJson }>
 let mergedSettings: SettingsJson = {}
 let settingsSources: Sources = []
 
-// Settings module is mocked to keep bootstrap/fs side effects out of this suite.
+// mock 设置模块，避免把 bootstrap 与文件系统副作用带进本套测试。
 mock.module('src/utils/settings/settings.js', () => ({
   getInitialSettings: () => mergedSettings,
   getSettingsWithSources: () => ({

@@ -1,8 +1,8 @@
 /**
- * `/lossless` — toggle and inspect lossless context mode.
+ * `/lossless` —— 开关与状态查看。
  *
- * Batch 1 implements on/off/status/help plus the session-vs-persisted split.
- * `doctor` is a read-only diagnostic added in a later batch.
+ * 批次 1 实现 on/off/status/help，以及「会话内生效」与「持久化保存」的区分。
+ * `doctor` 的只读诊断留到后续批次。
  */
 
 import type { LocalCommandCall } from '../../types/command.js'

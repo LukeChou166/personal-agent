@@ -1,9 +1,8 @@
 /**
- * Lossless context mode — public facade.
+ * 无损上下文模式 —— 对外门面。
  *
- * Batch 1 (PR-1) ships settings resolution and the command surface. Store,
- * capture, summarisation and retrieval land in later batches; `getLosslessStats`
- * reports `recordsAvailable: false` until the store exists.
+ * 批次 1（PR-1）只交付设置解析与命令入口；存储、捕获、摘要与检索在后续
+ * 批次落地。存储就绪前，`getLosslessStats` 固定返回 `recordsAvailable: false`。
  */
 
 export {
@@ -23,7 +22,7 @@ export type LosslessStats = {
   callsInWindow: number
 }
 
-/** Read-only snapshot for `/lossless status` (no full transcript scan). */
+/** 供 `/lossless status` 使用的只读快照（不做全量会话扫描）。 */
 export function getLosslessStats(): LosslessStats {
   return {
     recordsAvailable: false,

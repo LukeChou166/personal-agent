@@ -1,9 +1,9 @@
 /**
- * Lossless context mode — effective setting resolution.
+ * 无损上下文模式 —— 生效设置的解析。
  *
- * Precedence (FR-001): session command > env > project-local > project > user
- * > managed/flag > default (off). Out-of-range values are clamped to the schema
- * limits and flagged so `/lossless status` can surface it.
+ * 优先级（FR-001）：会话命令 > 环境变量 > 项目本地 > 项目 > 用户
+ * > 托管/命令行 > 默认（关闭）。越界数值会收敛到 schema 允许的范围，
+ * 并打上标记，供 `/lossless status` 展示。
  */
 
 import { join } from 'path'
@@ -45,7 +45,7 @@ export type LosslessConfig = {
   summarySpendBackoffMs: number
   ignoreSessionPatterns: string[]
   statelessSessionPatterns: string[]
-  /** True when one or more values were outside the supported range. */
+  /** 是否存在被收敛到合法范围的数值。 */
   clamped: boolean
 }
 
@@ -60,7 +60,7 @@ type NumericKey = keyof Omit<
   | 'clamped'
 >
 
-// [key, fallback, min, max, integer?] — env var is derived from the key.
+// [字段, 默认值, 最小值, 最大值, 是否取整] —— 环境变量名由字段名推导。
 type NumericSpec = readonly [
   key: NumericKey,
   fallback: number,
@@ -184,7 +184,7 @@ function buildConfig(): LosslessConfig {
   }
 }
 
-/** Effective config snapshot for the current process (cached until override). */
+/** 当前进程的生效配置快照（在会话覆盖前一直复用缓存）。 */
 export function getLosslessConfig(): LosslessConfig {
   cached ??= buildConfig()
   return cached
@@ -194,13 +194,13 @@ export function isLosslessEnabled(): boolean {
   return getLosslessConfig().enabled
 }
 
-/** `/lossless on|off` — applies from the next turn, not the current one. */
+/** `/lossless on|off`：从下一轮开始生效，不打断当前轮次。 */
 export function setSessionOverride(enabled: boolean): void {
   sessionOverride = enabled
   cached = undefined
 }
 
-/** Test helper: drop cached state so env/settings changes are re-read. */
+/** 测试辅助：清空缓存，让环境变量与设置的改动被重新读取。 */
 export function resetLosslessConfigCacheForTesting(): void {
   sessionOverride = undefined
   cached = undefined
