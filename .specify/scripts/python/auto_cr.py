@@ -208,6 +208,9 @@ def main() -> int:
     paths = list(args.paths)
     if args.feature_dir:
         paths.append(args.feature_dir)
+    if args.from_hook and not paths:
+        # The implement step can declare the batch's files instead of staging.
+        paths = os.environ.get("SPECIFY_CR_PATHS", "").split()
 
     result: dict[str, object] = {
         "feature": feature,
