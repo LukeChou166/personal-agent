@@ -62,6 +62,7 @@ export const DEFAULT_BUILD_FEATURES = [
   // 'HISTORY_SNIP', // 已禁用：snip 功能暂时关闭
   // 'CONTEXT_COLLAPSE', // 已禁用：实现是空壳 stub，启用后会抑制 auto compact 导致上下文管理完全失效
   'MONITOR_TOOL', // Monitor 工具，流式监控后台进程输出
+  'LOSSLESS', // 无损上下文模式（lossless-claw 能力内建），运行时由 lossless.enabled 控制
   // 'FORK_SUBAGENT',            // 已禁用：通过 Agent tool 的特殊方式实现了等效功能，无需再开
   // 'PROJECT_INSTRUCTIONS', // CLAUDE.md 独立成 <project-instructions> 用户消息（提升指令权重）；关闭则回落进 <system-reminder>
   'KAIROS', // Kairos 定时任务系统核心

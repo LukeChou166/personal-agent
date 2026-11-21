@@ -1,0 +1,24 @@
+version: 1
+
+# Extension hooks consumed by /speckit.* commands.
+# Entries under `hooks.<event>` run before/after the corresponding command.
+# `optional: false` marks a mandatory hook: the command MUST execute it and
+# wait for the result before reporting completion.
+
+hooks:
+  after_implement:
+    - extension: git-auto-cr
+      command: python3 .specify/scripts/python/auto_cr.py --from-hook --use-git-credential
+      description: >-
+        Commit the staged feature changes, push the feature branch, and return
+        a CR / diff link. With GITHUB_TOKEN or GH_TOKEN a pull request is opened;
+        without a token the GitHub compare URL is returned instead.
+      optional: false
+      enabled: true
+      prompt: |-
+        实现完成后自动创建 CR：
+        1) 只提交本次实现涉及的文件（先 `git add <paths>`，或通过 `SPECIFY_CR_PATHS` 环境变量声明；不得提交无关改动）；
+        2) 在 main/master 上先创建 `spec/<feature>` 分支，禁止 force push；
+        3) 推送成功且存在 token 时创建 PR，返回 PR 链接与 diff 链接；
+        4) 无 token 时返回 compare 链接（含 diff）；
+        5) 推送失败时保留本地提交，原样报告错误与 commit 哈希，禁止伪造链接。

@@ -795,6 +795,36 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'When true, poor mode is active — extract_memories and prompt_suggestion are disabled to save tokens.',
         ),
+      lossless: z
+        .object({
+          enabled: z
+            .boolean()
+            .optional()
+            .describe(
+              'When true, lossless context mode is enabled for new turns — every message is kept locally and layered summaries replace discard-style compaction.',
+            ),
+          freshTailCount: z.number().int().min(1).max(1000).optional(),
+          contextThreshold: z.number().min(0.1).max(0.99).optional(),
+          leafChunkTokens: z.number().int().min(1000).optional(),
+          leafMinFanout: z.number().int().min(2).max(1000).optional(),
+          leafTargetTokens: z.number().int().min(200).optional(),
+          condensedMinFanout: z.number().int().min(2).max(1000).optional(),
+          condensedTargetTokens: z.number().int().min(200).optional(),
+          incrementalMaxDepth: z.number().int().min(-1).max(10).optional(),
+          largeFileTokenThreshold: z.number().int().min(1000).optional(),
+          maxExpandTokens: z.number().int().min(200).max(8000).optional(),
+          summaryModel: z.string().optional(),
+          summaryTimeoutMs: z.number().int().min(1000).optional(),
+          summaryCallWindowMs: z.number().int().min(1000).optional(),
+          summaryMaxCallsPerWindow: z.number().int().min(0).optional(),
+          summarySpendBackoffMs: z.number().int().min(0).optional(),
+          ignoreSessionPatterns: z.array(z.string()).optional(),
+          statelessSessionPatterns: z.array(z.string()).optional(),
+        })
+        .optional()
+        .describe(
+          'Lossless context mode (lossless-claw style). Off by default; when enabled, full history is kept locally and summaries are layered instead of dropped.',
+        ),
       showClearContextOnPlanAccept: z
         .boolean()
         .optional()

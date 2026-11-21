@@ -168,6 +168,11 @@ const goalCmd = feature('GOAL')
       require('./commands/goal/index.js') as typeof import('./commands/goal/index.js')
     ).default
   : null
+const losslessCmd = feature('LOSSLESS')
+  ? (
+      require('./commands/lossless/index.js') as typeof import('./commands/lossless/index.js')
+    ).default
+  : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 import thinkback from './commands/thinkback/index.js'
 import thinkbackPlay from './commands/thinkback-play/index.js'
@@ -376,6 +381,7 @@ const COMMANDS = memoize((): Command[] => [
   ...(buddy ? [buddy] : []),
   ...(poor ? [poor] : []),
   ...(goalCmd ? [goalCmd] : []),
+  ...(losslessCmd ? [losslessCmd] : []),
   ...(proactive ? [proactive] : []),
   ...(monitorCmd ? [monitorCmd] : []),
   ...(coordinatorCmd ? [coordinatorCmd] : []),
@@ -436,6 +442,7 @@ const COMMANDS = memoize((): Command[] => [
     : []),
 ])
 
+// 懒加载 + 只初始化一次的 unordered_set
 export const builtInCommandNames = memoize(
   (): Set<string> =>
     new Set(COMMANDS().flatMap(_ => [_.name, ...(_.aliases ?? [])])),
