@@ -246,9 +246,19 @@ def main() -> int:
         try:
             git("push", "-u", "origin", branch, direct=args.no_proxy)
         except AutoCrError as exc:
-            result.update({"status": "push_failed", "error": str(exc)[:500]})
-            print(json.dumps(result, ensure_ascii=False, indent=2))
-            return 1
+            if args.no_proxy:
+                result.update({"status": "push_failed", "error": str(exc)[:500]})
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 1
+            # A stale http.proxy is a common local failure; retry once direct.
+            try:
+                git("push", "-u", "origin", branch, direct=True)
+            except AutoCrError as retry_exc:
+                result.update(
+                    {"status": "push_failed", "error": str(retry_exc)[:500]}
+                )
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 1
 
         remote = parse_remote(git("remote", "get-url", "origin"))
         if not remote:
