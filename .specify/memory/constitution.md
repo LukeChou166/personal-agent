@@ -18,7 +18,7 @@
 2. **分支策略**：当前在 `main` / `master` 时，先创建 `spec/<feature>` 分支再提交；**禁止 force push**，禁止改写已有历史。
 3. **CR 创建**：存在 `GITHUB_TOKEN` 或 `GH_TOKEN` 时通过 GitHub API 创建 PR，返回 `pr_url` 与 `diff_url`；无 token 时推送分支并返回 compare 链接（同时是 diff 视图与创建 PR 的入口）。
 4. **失败处理**：推送或 API 失败时保留本地提交，原样报告错误、commit 哈希与已尝试的命令；**禁止伪造或猜测链接**。
-5. **凭据安全**：token 只能从环境变量读取，禁止写入仓库、日志或提交信息。
+5. **凭据安全**：token 优先从 `GITHUB_TOKEN` / `GH_TOKEN` 读取；未配置时可显式使用 `--use-git-credential` 从本机 git credential helper 获取（默认关闭）。无论来源如何，禁止写入仓库、日志或提交信息。
 6. **可追溯**：结果写入 `.specify/cr-result.json`（`status`、`branch`、`commit`、`pr_url`、`diff_url`），供后续命令引用。
 
 钩子实现：`.specify/scripts/python/auto_cr.py`；注册文件：`.specify/extensions.yml`。

@@ -8,7 +8,7 @@ version: 1
 hooks:
   after_implement:
     - extension: git-auto-cr
-      command: python3 .specify/scripts/python/auto_cr.py --from-hook
+      command: python3 .specify/scripts/python/auto_cr.py --from-hook --use-git-credential
       description: >-
         Commit the staged feature changes, push the feature branch, and return
         a CR / diff link. With GITHUB_TOKEN or GH_TOKEN a pull request is opened;

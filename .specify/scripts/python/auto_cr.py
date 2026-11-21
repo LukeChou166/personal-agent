@@ -141,6 +141,25 @@ def parse_remote(url: str) -> tuple[str, str] | None:
     return match.group("owner"), match.group("repo")
 
 
+def git_credential_token() -> str | None:
+    """Read a GitHub token from the configured git credential helper."""
+    try:
+        proc = subprocess.run(
+            ["git", "credential", "fill"],
+            input="protocol=https\nhost=github.com\n\n",
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in proc.stdout.splitlines():
+        if line.startswith("password="):
+            value = line[len("password=") :].strip()
+            return value or None
+    return None
+
+
 def create_pull_request(
     owner: str, repo: str, head: str, base: str, title: str, token: str
 ) -> dict[str, str]:
@@ -194,6 +213,16 @@ def main() -> int:
     parser.add_argument("--message", default=None)
     parser.add_argument("--title", default=None)
     parser.add_argument("--no-proxy", action="store_true", help="disable git http.proxy for this run")
+    parser.add_argument(
+        "--pr-only",
+        action="store_true",
+        help="branch already has commits: push and open the CR without a new commit",
+    )
+    parser.add_argument(
+        "--use-git-credential",
+        action="store_true",
+        help="when no env token is set, read the token from `git credential fill`",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -228,20 +257,38 @@ def main() -> int:
 
         changed = staged_paths(paths)
         if not changed:
-            result.update({"status": "no_changes"})
-            print(json.dumps(result, ensure_ascii=False, indent=2))
-            return 0
-
-        ensure_branch(base, branch)
-        message = args.message or f"feat: {feature} (auto CR)"
-        # Pathspec-limited commit: previously staged unrelated files stay staged
-        # and out of this commit.
-        if paths:
-            git("commit", "-m", message, "--", *filter_ignored(paths))
+            if not args.pr_only:
+                result.update({"status": "no_changes"})
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 0
+            current = git("rev-parse", "--abbrev-ref", "HEAD")
+            if current == base:
+                raise AutoCrError(
+                    f"no commits ahead of '{base}'; commit before opening a CR"
+                )
+            branch = current
+            result.update(
+                {
+                    "branch": branch,
+                    "commit": git("rev-parse", "--short", "HEAD"),
+                    "files": 0,
+                }
+            )
         else:
-            git("commit", "-m", message)
-        commit = git("rev-parse", "--short", "HEAD")
-        result.update({"commit": commit, "files": len(changed)})
+            ensure_branch(base, branch)
+            message = args.message or f"feat: {feature} (auto CR)"
+            # Pathspec-limited commit: previously staged unrelated files stay
+            # staged and out of this commit.
+            if paths:
+                git("commit", "-m", message, "--", *filter_ignored(paths))
+            else:
+                git("commit", "-m", message)
+            result.update(
+                {
+                    "commit": git("rev-parse", "--short", "HEAD"),
+                    "files": len(changed),
+                }
+            )
 
         try:
             git("push", "-u", "origin", branch, direct=args.no_proxy)
@@ -269,6 +316,8 @@ def main() -> int:
         owner, repo = remote
         title = args.title or message
         token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        if not token and args.use_git_credential:
+            token = git_credential_token()
         if token:
             links = create_pull_request(owner, repo, branch, base, title, token)
             result.update({"status": "pr_created", **links})
