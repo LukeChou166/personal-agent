@@ -4,18 +4,18 @@
  * 只读 `meta.json` 的计数，不扫描消息正文，保证状态命令在 200ms 内返回。
  */
 
-import { getOriginalCwd, getSessionId } from '../../bootstrap/state.js'
-import { sanitizePath } from '../../utils/sessionStoragePortable.js'
-import { getLosslessConfig } from './settings.js'
-import { createStore } from './store.js'
+import { getSessionStore } from './sessionStore.js'
 
 export type LosslessStats = {
   recordsAvailable: boolean
   messages: number
   nodes: number
   pendingMessages: number
+  pendingNodes: number
   failures: number
+  tripped: boolean
   callsInWindow: number
+  backoffUntil?: number
 }
 
 export const EMPTY_STATS: LosslessStats = {
@@ -23,19 +23,16 @@ export const EMPTY_STATS: LosslessStats = {
   messages: 0,
   nodes: 0,
   pendingMessages: 0,
+  pendingNodes: 0,
   failures: 0,
+  tripped: false,
   callsInWindow: 0,
 }
 
 export function readCurrentStats(): LosslessStats {
-  const config = getLosslessConfig()
+  const { store, config } = getSessionStore()
   if (!config.enabled) return EMPTY_STATS
 
-  const store = createStore({
-    storeRoot: config.storeRoot,
-    projectKey: sanitizePath(getOriginalCwd()),
-    sessionId: getSessionId(),
-  })
   const meta = store.readMeta()
   if (!meta) return EMPTY_STATS
 
@@ -43,8 +40,11 @@ export function readCurrentStats(): LosslessStats {
     recordsAvailable: true,
     messages: meta.messageCount,
     nodes: meta.nodeCount,
-    pendingMessages: 0,
-    failures: 0,
-    callsInWindow: 0,
+    pendingMessages: meta.backlog?.pendingMessages ?? 0,
+    pendingNodes: meta.backlog?.pendingNodes ?? 0,
+    failures: meta.backlog?.failures ?? 0,
+    tripped: meta.backlog?.tripped ?? false,
+    callsInWindow: meta.guard?.callsInWindow ?? 0,
+    backoffUntil: meta.guard?.backoffUntil,
   }
 }

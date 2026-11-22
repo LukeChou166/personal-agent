@@ -30,7 +30,9 @@ export function getLosslessStats(): LosslessStats {
       messages: 0,
       nodes: 0,
       pendingMessages: 0,
+      pendingNodes: 0,
       failures: 0,
+      tripped: false,
       callsInWindow: 0,
     }
   }
