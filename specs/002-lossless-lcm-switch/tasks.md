@@ -45,10 +45,10 @@ description: "Task list for Lossless-Claw 无损上下文适配开关"
 - [X] T006 实现 `src/services/lossless/settings.ts`：`isLosslessEnabled()`、`getLosslessConfig()`、`getEffectiveSource()`、`setSessionOverride('on'|'off')`。优先级必须为「会话命令 > 环境变量（`CLAUDE_CODE_LOSSLESS`）> 项目本地 > 项目 > 用户 > 默认关闭」（FR-001）；来源判定复用 `getSettingsWithSources()`（`src/utils/settings/settings.ts:836`）；越界值收敛并在结果中标记 `clamped`
 - [X] T007 [P] 实现 `src/services/lossless/store.ts` 的路径与权限部分：`getStorePaths(sessionId)` 返回 `{dir,messages,nodes,meta}`，目录 `0700`、文件 `0600`；`projectKey` 复用现有项目目录命名（`src/utils/sessionStorage.ts:199` 的 `getProjectsDir()` 同源逻辑）；`LOSSLESS_DATABASE_PATH` 可覆盖根目录
 - [X] T008 实现 `src/services/lossless/store.ts` 的读写部分：`appendMessage(record)`、`appendNode(node)`、`readMessages(filter)`、`readNodes()`、`readMeta()`、`writeMetaAtomic()`。要求：单行 JSON 追加；解析失败行计入 `corruptLines` 并跳过（FR-011）；`meta.json` 用临时文件 + rename 原子替换；`schemaVersion: 1`
-- [ ] T009 实现 `src/services/lossless/capture.ts`：post-sampling 钩子函数，按 `uuid`/`lastSeq` 去重写入新增消息；`tokenEstimate` 计算；单条超过 `largeFileTokenThreshold`（默认 25000）时标记 `large: true` 并写 `sourceRef`；命中 `ignoreSessionPatterns` 时不写，命中 `statelessSessionPatterns` 时只读
-- [ ] T010 在 `src/setup.ts` 注册 capture 钩子（与 SessionMemory 初始化同处），采用 `registerPostSamplingHook`（`src/utils/hooks/postSamplingHooks.ts:31`）；钩子内首行调用 `isLosslessEnabled()`，关闭时立即返回且零 I/O（FR-002）
+- [X] T009 实现 `src/services/lossless/capture.ts`：post-sampling 钩子函数，按 `uuid`/`lastSeq` 去重写入新增消息；`tokenEstimate` 计算；单条超过 `largeFileTokenThreshold`（默认 25000）时标记 `large: true` 并写 `sourceRef`；命中 `ignoreSessionPatterns` 时不写，命中 `statelessSessionPatterns` 时只读
+- [X] T010 在 `src/setup.ts` 注册 capture 钩子（与 SessionMemory 初始化同处），采用 `registerPostSamplingHook`（`src/utils/hooks/postSamplingHooks.ts:31`）；钩子内首行调用 `isLosslessEnabled()`，关闭时立即返回且零 I/O（FR-002）
 - [X] T011 [P] 编写 `src/services/lossless/__tests__/store.test.ts`：追加/读取、截断行容错、`meta.json` 原子替换、目录/文件权限、`schemaVersion` 不匹配进入只读；关闭开关 MUST NOT 删除已有记录（FR-010）；存储不可写时降级为当前压缩行为且对话不中断（FR-011）
-- [ ] T012 [P] 编写 `src/services/lossless/__tests__/capture.test.ts`：关闭态零写入零请求、重复 uuid 不重复写、`large` 标记与 `sourceRef`、排除/无状态模式
+- [X] T012 [P] 编写 `src/services/lossless/__tests__/capture.test.ts`：关闭态零写入零请求、重复 uuid 不重复写、`large` 标记与 `sourceRef`、排除/无状态模式
 - [X] T013 实现 `src/commands/lossless/lossless.ts` 的 `on|off|status|help`：`on/off` 仅设会话覆盖并提示「下一轮生效」，`--save` 写入用户级设置（`updateSettingsForSource('userSettings', ...)`）；`status` 输出 `contracts/cli-lossless.md` 的稳定字段；在 `src/commands.ts` 中以 `feature('LOSSLESS')` 条件注册
 - [X] T014 [P] 编写 `src/services/lossless/__tests__/settings.test.ts`：四级优先级、环境变量覆盖、会话覆盖、来源字段、越界收敛
 
@@ -206,7 +206,7 @@ Task: "LcmExpandTool.ts in packages/builtin-tools/src/tools/LosslessTool/"
 |---|---|---|---|
 | PR-1 | T001–T006, T013, T014 | flag + 设置解析 + 命令骨架 | ~490（已完成） |
 | PR-2 | T007, T008, T011 | 存储层 + 状态接线 | ~420（已完成） |
-| PR-3 | T009, T010, T012 | post-sampling 捕获钩子 | ~320 |
+| PR-3 | T009, T010, T012 | post-sampling 捕获钩子 | ~320（已完成） |
 | PR-4 | T015–T019 | 分层摘要（叶子/浓缩/债务） | ~480 |
 | PR-5 | T020–T022 | 装配器 + 自动压缩分流 | ~430 |
 | PR-6 | T023–T031 | 检索 + 三个工具 | ~500 |

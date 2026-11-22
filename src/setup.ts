@@ -297,6 +297,13 @@ export async function setup(
   if (!isBareMode()) {
     initSessionMemory() // Synchronous - registers hook, gate check happens lazily
     initSkillLearning() // Synchronous - registers hook, gate check happens lazily
+    if (feature('LOSSLESS')) {
+      /* eslint-disable @typescript-eslint/no-require-imports */
+      ;(
+        require('./services/lossless/capture.js') as typeof import('./services/lossless/capture.js')
+      ).registerLosslessCapture()
+      /* eslint-enable @typescript-eslint/no-require-imports */
+    }
     if (feature('CONTEXT_COLLAPSE')) {
       /* eslint-disable @typescript-eslint/no-require-imports */
       ;(
