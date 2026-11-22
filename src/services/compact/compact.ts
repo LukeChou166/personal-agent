@@ -1,6 +1,7 @@
 import { feature } from 'bun:bundle'
 import type { UUID } from 'crypto'
 import uniqBy from 'lodash-es/uniqBy.js'
+import { isLosslessEnabled } from '../lossless/settings.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const sessionTranscriptModule = feature('KAIROS')
@@ -417,6 +418,19 @@ export async function compactConversation(
   isAutoCompact: boolean = false,
   recompactionInfo?: RecompactionInfo,
 ): Promise<CompactionResult> {
+  // 无损模式接管：手动 /compact 也产出分层摘要，而不是单层总结。
+  if (isLosslessEnabled()) {
+    /* eslint-disable @typescript-eslint/no-require-imports */
+    const { runLosslessCompaction } =
+      require('../lossless/runtime.js') as typeof import('../lossless/runtime.js')
+    /* eslint-enable @typescript-eslint/no-require-imports */
+    return runLosslessCompaction(
+      messages,
+      context,
+      isAutoCompact ? 'auto' : 'manual',
+    )
+  }
+
   try {
     if (messages.length === 0) {
       throw new Error(ERROR_MESSAGE_NOT_ENOUGH_MESSAGES)

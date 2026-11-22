@@ -54,6 +54,24 @@ export type SummaryNode = {
   status: 'active' | 'corrupt'
 }
 
+/** 待压缩状态：还没被任何摘要覆盖的消息/节点，以及失败与熔断。 */
+export type CompactionBacklog = {
+  pendingMessages: number
+  pendingNodes: number
+  failures: number
+  nextRetryAt?: string
+  lastError?: string
+  tripped: boolean
+}
+
+/** 花费护栏状态：窗口计数与冷却截止时间（毫秒时间戳）。 */
+export type GuardState = {
+  windowStart: number
+  callsInWindow: number
+  backoffUntil?: number
+  lastCallAt?: number
+}
+
 export type StoreMeta = {
   schemaVersion: number
   sessionId: string
@@ -65,6 +83,8 @@ export type StoreMeta = {
   messageCount: number
   nodeCount: number
   corruptLines: number
+  backlog?: CompactionBacklog
+  guard?: GuardState
 }
 
 export type StorePaths = {

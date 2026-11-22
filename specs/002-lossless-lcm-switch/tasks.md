@@ -62,14 +62,14 @@ description: "Task list for Lossless-Claw 无损上下文适配开关"
 
 **Independent Test**: 开启开关跑超过阈值的会话，确认出现 `depth:1`（必要时 `depth:2`）节点、对话继续可用、无上下文超限错误；关闭后行为与现状一致。
 
-- [ ] T015 [US1] 在 `src/services/lossless/engine.ts` 实现消息级 token 估算与叶子分块：按 `leafChunkTokens`（默认 20000）聚合、`leafMinFanout`（默认 8）控制最少条数，产出待摘要块与 `span {firstSeq,lastSeq}`
-- [ ] T016 [US1] 在 `src/services/lossless/summarizer.ts` 实现摘要调用：`sideQuery`（`src/utils/sideQuery.ts:178`），`querySource: 'lossless_summary'`，模型取 `toolUseContext.options.mainLoopModel` 或 `lossless.summaryModel`，`max_tokens` 取 `leafTargetTokens`，超时取 `summaryTimeoutMs`，失败返回结构化错误不抛出到主循环
-- [ ] T017 [US1] 在 `engine.ts` 写入 leaf 节点到 `nodes.jsonl`：`kind:'leaf'`、`depth:1`、`span`、`messageIds`（未超限时）、`text`、`tokenEstimate`、`model`、`status:'active'`；校验规则按 `data-model.md` 第 4 节
-- [ ] T018 [US1] 在 `engine.ts` 实现浓缩层：当同深度节点数 ≥ `condensedMinFanout`（默认 4）时生成 `kind:'condensed'` 节点，`childNodeIds` 至少 2 个且深度为 `depth-1`；`incrementalMaxDepth` 控制每轮新增层数（`0` 仅叶子、`-1` 不限）
-- [ ] T019 [US1] 在 `engine.ts` 维护 `meta.backlog`（`pendingMessages`、`pendingNodes`、`failures`、`nextRetryAt`、`lastError`、`tripped`），失败 3 次后置 `tripped` 并停止自动重试
-- [ ] T020 [US1] 实现 `src/services/lossless/assembler.ts`：产出 `CompactionResult`（`src/services/compact/compact.ts:305`），`boundaryMarker` 复用现有 compact boundary 构造，`summaryMessages` 放根摘要（按 depth 自顶向下），`messagesToKeep` 放最近 `freshTailCount` 条原文并按预算截断；`large: true` 的消息只放摘要与 `sourceRef` 引用，不把原文塞回活动上下文（FR-009）
-- [ ] T021 [US1] 在 `src/services/compact/autoCompact.ts` 的 `autoCompactIfNeeded` 中、`trySessionMemoryCompaction` 之前分流：`isLosslessEnabled()` 为真时懒 `require` lossless 引擎并返回其结果；关闭时保持原路径不变（FR-002/FR-014）
-- [ ] T022 [P] [US1] 编写 `src/services/lossless/__tests__/engine.test.ts` 与 `assembler.test.ts`：叶子扇出与 span、浓缩深度约束、`freshTailCount` 保护、预算截断、失败态 `tripped`
+- [X] T015 [US1] 在 `src/services/lossless/engine.ts` 实现消息级 token 估算与叶子分块：按 `leafChunkTokens`（默认 20000）聚合、`leafMinFanout`（默认 8）控制最少条数，产出待摘要块与 `span {firstSeq,lastSeq}`
+- [X] T016 [US1] 在 `src/services/lossless/summarizer.ts` 实现摘要调用：`sideQuery`（`src/utils/sideQuery.ts:178`），`querySource: 'lossless_summary'`，模型取 `toolUseContext.options.mainLoopModel` 或 `lossless.summaryModel`，`max_tokens` 取 `leafTargetTokens`，超时取 `summaryTimeoutMs`，失败返回结构化错误不抛出到主循环
+- [X] T017 [US1] 在 `engine.ts` 写入 leaf 节点到 `nodes.jsonl`：`kind:'leaf'`、`depth:1`、`span`、`messageIds`（未超限时）、`text`、`tokenEstimate`、`model`、`status:'active'`；校验规则按 `data-model.md` 第 4 节
+- [X] T018 [US1] 在 `engine.ts` 实现浓缩层：当同深度节点数 ≥ `condensedMinFanout`（默认 4）时生成 `kind:'condensed'` 节点，`childNodeIds` 至少 2 个且深度为 `depth-1`；`incrementalMaxDepth` 控制每轮新增层数（`0` 仅叶子、`-1` 不限）
+- [X] T019 [US1] 在 `engine.ts` 维护 `meta.backlog`（`pendingMessages`、`pendingNodes`、`failures`、`nextRetryAt`、`lastError`、`tripped`），失败 3 次后置 `tripped` 并停止自动重试
+- [X] T020 [US1] 实现 `src/services/lossless/assembler.ts`：产出 `CompactionResult`（`src/services/compact/compact.ts:305`），`boundaryMarker` 复用现有 compact boundary 构造，`summaryMessages` 放根摘要（按 depth 自顶向下），`messagesToKeep` 放最近 `freshTailCount` 条原文并按预算截断；`large: true` 的消息只放摘要与 `sourceRef` 引用，不把原文塞回活动上下文（FR-009）
+- [X] T021 [US1] 在 `src/services/compact/autoCompact.ts` 的 `autoCompactIfNeeded` 中、`trySessionMemoryCompaction` 之前分流：`isLosslessEnabled()` 为真时懒 `require` lossless 引擎并返回其结果；关闭时保持原路径不变（FR-002/FR-014）
+- [X] T022 [P] [US1] 编写 `src/services/lossless/__tests__/engine.test.ts` 与 `assembler.test.ts`：叶子扇出与 span、浓缩深度约束、`freshTailCount` 保护、预算截断、失败态 `tripped`
 
 **Checkpoint**: MVP 成立——开关开启即「不再丢历史 + 继续可用」。
 
@@ -81,14 +81,14 @@ description: "Task list for Lossless-Claw 无损上下文适配开关"
 
 **Independent Test**: 在被压缩的会话中问一个只出现在早期的唯一标识，模型能检索并展开出原文。
 
-- [ ] T023 [US2] 实现 `src/services/lossless/retrieval.ts` 的 `grep(pattern, {limit, role, nodeId})`：1MB 分块扫描 `messages.jsonl`，大小写无关预筛，仅解析命中行；返回 `RetrievalHit[]` 与 `scanned_messages`；`limit` 1–50 默认 20
-- [ ] T024 [US2] 实现 `retrieval.ts` 的 `describe(nodeId)`：返回节点元数据、最多 20 个子节点、`expandable_tokens`；`corrupt` 节点只返回元数据不抛错
-- [ ] T025 [US2] 实现 `retrieval.ts` 的 `expand({nodeId|messageIds, maxTokens})`：按 `seq` 正序拼装，每条前缀 `[seq/uuid/role]`，超过 `maxExpandTokens`（默认 4000，上限 8000）截断并返回 `next.start_seq`
-- [ ] T026 [P] [US2] 创建 `packages/builtin-tools/src/tools/LosslessTool/LcmGrepTool.ts`：zod 输入 `{pattern, limit?, role?, node_id?}`，`isEnabled()` 返回 `isLosslessEnabled()`，`isReadOnly()` 为 true，`searchHint: 'search history transcript recall earlier messages keywords'`
-- [ ] T027 [P] [US2] 创建 `packages/builtin-tools/src/tools/LosslessTool/LcmDescribeTool.ts`：输入 `{node_id}`，输出按 `contracts/tools.md` 第 2 节
-- [ ] T028 [P] [US2] 创建 `packages/builtin-tools/src/tools/LosslessTool/LcmExpandTool.ts`：输入 `{node_id?, message_ids?, max_tokens?}`，输出按 `contracts/tools.md` 第 3 节
-- [ ] T029 [P] [US2] 创建 `packages/builtin-tools/src/tools/LosslessTool/prompt.ts`：三个工具的描述与使用指引（先 grep 后 expand；展开消耗上下文；引用时给出 seq/uuid）
-- [ ] T030 [US2] 从 `packages/builtin-tools/src/index.ts` 导出三个工具，并在 `src/tools.ts` 的 `getAllBaseTools()`（`:219`）中以条件展开注入；关闭时三个工具不得出现在工具列表（FR-002）
+- [X] T023 [US2] 实现 `src/services/lossless/retrieval.ts` 的 `grep(pattern, {limit, role, nodeId})`：1MB 分块扫描 `messages.jsonl`，大小写无关预筛，仅解析命中行；返回 `RetrievalHit[]` 与 `scanned_messages`；`limit` 1–50 默认 20
+- [X] T024 [US2] 实现 `retrieval.ts` 的 `describe(nodeId)`：返回节点元数据、最多 20 个子节点、`expandable_tokens`；`corrupt` 节点只返回元数据不抛错
+- [X] T025 [US2] 实现 `retrieval.ts` 的 `expand({nodeId|messageIds, maxTokens})`：按 `seq` 正序拼装，每条前缀 `[seq/uuid/role]`，超过 `maxExpandTokens`（默认 4000，上限 8000）截断并返回 `next.start_seq`
+- [X] T026 [P] [US2] 创建 `packages/builtin-tools/src/tools/LosslessTool/LcmGrepTool.ts`：zod 输入 `{pattern, limit?, role?, node_id?}`，`isEnabled()` 返回 `isLosslessEnabled()`，`isReadOnly()` 为 true，`searchHint: 'search history transcript recall earlier messages keywords'`
+- [X] T027 [P] [US2] 创建 `packages/builtin-tools/src/tools/LosslessTool/LcmDescribeTool.ts`：输入 `{node_id}`，输出按 `contracts/tools.md` 第 2 节
+- [X] T028 [P] [US2] 创建 `packages/builtin-tools/src/tools/LosslessTool/LcmExpandTool.ts`：输入 `{node_id?, message_ids?, max_tokens?}`，输出按 `contracts/tools.md` 第 3 节
+- [X] T029 [P] [US2] 创建 `packages/builtin-tools/src/tools/LosslessTool/prompt.ts`：三个工具的描述与使用指引（先 grep 后 expand；展开消耗上下文；引用时给出 seq/uuid）
+- [X] T030 [US2] 从 `packages/builtin-tools/src/index.ts` 导出三个工具，并在 `src/tools.ts` 的 `getAllBaseTools()`（`:219`）中以条件展开注入；关闭时三个工具不得出现在工具列表（FR-002）
 - [ ] T031 [P] [US2] 编写 `src/services/lossless/__tests__/retrieval.test.ts`（命中/无命中/截断/跨会话拒绝/corrupt 节点）与 `packages/builtin-tools/src/tools/LosslessTool/__tests__/tools.test.ts`（输入校验、输出结构）
 
 **Checkpoint**: 「无损」可被验证——模型能取回原文，而非只能看摘要。
@@ -101,9 +101,9 @@ description: "Task list for Lossless-Claw 无损上下文适配开关"
 
 **Independent Test**: 开启/关闭/存储不可用三种状态下执行 `status`，输出与实际一致；篡改一行后 `doctor` 能报告且不修复。
 
-- [ ] T032 [US3] 在 `src/commands/lossless/lossless.ts` 补全 `status` 全部字段：开关与来源、存储路径与占用、节点数与分层分布、待压缩数量与失败次数与重试时间、护栏窗口用量、摘要模型是否为覆盖值（字段清单见 `contracts/cli-lossless.md`）
-- [ ] T033 [US3] 实现 `doctor`：扫描 `messages.jsonl` 损坏行数、节点缺失子节点、span 缺口/重叠；只输出报告，不写盘、不发模型调用
-- [ ] T034 [US3] 保证 `status` 只读 `meta.json` 计数、不做正文全量扫描；存储不可读时输出 `store: unavailable (<reason>)` 且退出码 0
+- [X] T032 [US3] 在 `src/commands/lossless/lossless.ts` 补全 `status` 全部字段：开关与来源、存储路径与占用、节点数与分层分布、待压缩数量与失败次数与重试时间、护栏窗口用量、摘要模型是否为覆盖值（字段清单见 `contracts/cli-lossless.md`）
+- [X] T033 [US3] 实现 `doctor`：扫描 `messages.jsonl` 损坏行数、节点缺失子节点、span 缺口/重叠；只输出报告，不写盘、不发模型调用
+- [X] T034 [US3] 保证 `status` 只读 `meta.json` 计数、不做正文全量扫描；存储不可读时输出 `store: unavailable (<reason>)` 且退出码 0
 - [ ] T035 [P] [US3] 编写 `src/commands/lossless/__tests__/status.test.ts`：字段快照、OFF 态文案、不可写降级、`doctor` 对篡改数据的报告
 
 **Checkpoint**: 用户能观测与止损，无需整体关掉功能。
@@ -116,11 +116,11 @@ description: "Task list for Lossless-Claw 无损上下文适配开关"
 
 **Independent Test**: 把 `summaryMaxCallsPerWindow` 设为 1，第二次摘要被拒绝并提示且对话不中断；被排除会话零记录。
 
-- [ ] T036 [US4] 实现 `src/services/lossless/guard.ts`：窗口计数（`summaryCallWindowMs`）、单次超时（`summaryTimeoutMs`）、冷却（`summarySpendBackoffMs`）、熔断（连续 3 次失败）；状态持久化到 `meta.guard`，状态迁移按 `data-model.md` 第 6 节
-- [ ] T037 [US4] 在 `summarizer.ts` 调用前接入 guard：被拒绝时不发请求、累加 backlog、返回一次可见提示（同一轮不重复提示）
-- [ ] T038 [US4] 在 `capture.ts` 与 `engine.ts` 落实会话排除：`ignoreSessionPatterns` 完全不记录且不摘要，`statelessSessionPatterns` 可读不写；pattern 语义为 `*` 不跨 `:`、`**` 跨 `:`、按完整 session key 匹配
-- [ ] T039 [US4] 校验本地化与权限：所有写入路径位于用户配置目录，目录 `0700`、文件 `0600`；新增断言确认不产生任何网络请求（除 `lossless_summary` 摘要在开启时）；新增跨项目用例：项目 A 开启、项目 B 未开启时 B 零文件零请求且检索不串数据（SC-010）；非 POSIX 平台记录 ACL 差异
-- [ ] T040 [P] [US4] 编写 `src/services/lossless/__tests__/guard.test.ts` 与 `exclusion.test.ts`：窗口上限、冷却、熔断、pattern 匹配、零网络断言
+- [X] T036 [US4] 实现 `src/services/lossless/guard.ts`：窗口计数（`summaryCallWindowMs`）、单次超时（`summaryTimeoutMs`）、冷却（`summarySpendBackoffMs`）、熔断（连续 3 次失败）；状态持久化到 `meta.guard`，状态迁移按 `data-model.md` 第 6 节
+- [X] T037 [US4] 在 `summarizer.ts` 调用前接入 guard：被拒绝时不发请求、累加 backlog、返回一次可见提示（同一轮不重复提示）
+- [X] T038 [US4] 在 `capture.ts` 与 `engine.ts` 落实会话排除：`ignoreSessionPatterns` 完全不记录且不摘要，`statelessSessionPatterns` 可读不写；pattern 语义为 `*` 不跨 `:`、`**` 跨 `:`、按完整 session key 匹配
+- [X] T039 [US4] 校验本地化与权限：所有写入路径位于用户配置目录，目录 `0700`、文件 `0600`；新增断言确认不产生任何网络请求（除 `lossless_summary` 摘要在开启时）；新增跨项目用例：项目 A 开启、项目 B 未开启时 B 零文件零请求且检索不串数据（SC-010）；非 POSIX 平台记录 ACL 差异
+- [X] T040 [P] [US4] 编写 `src/services/lossless/__tests__/guard.test.ts` 与 `exclusion.test.ts`：窗口上限、冷却、熔断、pattern 匹配、零网络断言
 
 **Checkpoint**: 护栏与隐私承诺可测，用户可放心长期开启。
 
@@ -132,8 +132,8 @@ description: "Task list for Lossless-Claw 无损上下文适配开关"
 
 **Independent Test**: 开启态下依次执行手动 `/compact`、`--resume`、切换 provider，行为与历史检索结果一致。
 
-- [ ] T041 [US5] 在 `src/services/compact/compact.ts` 的 `compactConversation`（`:411`）入口分流：`isLosslessEnabled()` 为真时懒 `require` lossless 装配器，返回 DAG 摘要版 `CompactionResult`；关闭时不改变任何路径（FR-014）
-- [ ] T042 [US5] 校验会话恢复：确认 store 以 `getSessionId()` 定位、`--resume`/branch 后仍可检索（不实现回填）；在 `src/services/lossless/store.ts` 暴露 `hasSession(sessionId)`
+- [X] T041 [US5] 在 `src/services/compact/compact.ts` 的 `compactConversation`（`:411`）入口分流：`isLosslessEnabled()` 为真时懒 `require` lossless 装配器，返回 DAG 摘要版 `CompactionResult`；关闭时不改变任何路径（FR-014）
+- [X] T042 [US5] 校验会话恢复：确认 store 以 `getSessionId()` 定位、`--resume`/branch 后仍可检索（不实现回填）；在 `src/services/lossless/store.ts` 暴露 `hasSession(sessionId)`
 - [ ] T043 [US5] 校验 provider 兼容：摘要走 `sideQuery` 对 `CLAUDE_CODE_USE_OPENAI` / `GEMINI` / `GROK` 路径的 mock 测试，确认无 firstParty 专属字段
 - [ ] T044 [P] [US5] 编写 `tests/integration/lossless-compat.test.ts`：手动压缩产出 DAG 节点、恢复后计数一致、provider 切换不破坏摘要调用、100 轮长会话无上下文超限失败（SC-003）
 
@@ -145,10 +145,10 @@ description: "Task list for Lossless-Claw 无损上下文适配开关"
 
 **Purpose**: 文档、许可、性能与全量回归
 
-- [ ] T045 [P] 编写 `docs/features/lossless-context.md`：能力说明、开关方式、费用与隐私、故障排查（引用 `quickstart.md` 场景）
-- [ ] T046 [P] 在 `src/services/lossless/README.md` 补齐上游版本/提交、能力映射表与 MIT 许可声明（FR-015）
+- [X] T045 [P] 编写 `docs/features/lossless-context.md`：能力说明、开关方式、费用与隐私、故障排查（引用 `quickstart.md` 场景）
+- [X] T046 [P] 在 `src/services/lossless/README.md` 补齐上游版本/提交、能力映射表与 MIT 许可声明（FR-015）
 - [ ] T047 增加 10k 消息规模的检索基准测试（`src/services/lossless/__tests__/perf.test.ts`），断言 p95 < 1s（SC-004）；同时断言常驻上下文压缩比 ≥10:1、存储体积随消息数线性增长（SC-005）
-- [ ] T048 全量回归：`bun run typecheck`、`bun run lint`、`bun test`、触及 `feature()` 的改动追加 `bun build --target=bun --production src/main.tsx`；核对关闭态零副作用四条断言（`contracts/settings-schema.md` 第 4 节）
+- [X] T048 全量回归：`bun run typecheck`、`bun run lint`、`bun test`、触及 `feature()` 的改动追加 `bun build --target=bun --production src/main.tsx`；核对关闭态零副作用四条断言（`contracts/settings-schema.md` 第 4 节）
 
 ---
 

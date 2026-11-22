@@ -39,14 +39,19 @@ function renderStatus(): string {
   const clamped = config.clamped ? ' (values clamped to supported range)' : ''
   const records = stats.recordsAvailable
     ? `${stats.messages} messages, ${stats.nodes} summary nodes`
-    : 'no records yet (store lands in the next batch)'
+    : 'no records yet for this session'
+
+  const backoff = stats.backoffUntil
+    ? `active until ${new Date(stats.backoffUntil).toISOString()}`
+    : 'none'
+  const tripped = stats.tripped ? ' (tripped: automatic summaries stopped)' : ''
 
   return [
     `lossless: ${state} (source: ${config.source})${clamped}`,
     `  store: ${config.storeRoot}`,
     `  records: ${records}`,
-    `  backlog: ${stats.pendingMessages} messages pending, ${stats.failures} failures`,
-    `  guard: ${stats.callsInWindow}/${config.summaryMaxCallsPerWindow} calls in window, backoff policy: ${formatMs(config.summarySpendBackoffMs)}`,
+    `  backlog: ${stats.pendingMessages} messages / ${stats.pendingNodes} nodes pending, ${stats.failures} failures${tripped}`,
+    `  guard: ${stats.callsInWindow}/${config.summaryMaxCallsPerWindow} calls in window, backoff: ${backoff}`,
     `  summary model: ${config.summaryModel ?? 'main loop model'} (${config.summaryModel ? 'override' : 'default'})`,
     config.enabled
       ? '  next: /lossless off to stop recording; existing records are kept'
@@ -84,12 +89,30 @@ export const call: LocalCommandCall = async args => {
       }
     }
 
-    case 'doctor':
-      return {
-        type: 'text',
-        value:
-          'lossless doctor: read-only diagnostics are not available in this batch. Use /lossless status for the effective setting.',
+    case 'doctor': {
+      try {
+        /* eslint-disable @typescript-eslint/no-require-imports */
+        const { diagnoseCurrentSession } =
+          require('../../services/lossless/diagnostics.js') as typeof import('../../services/lossless/diagnostics.js')
+        /* eslint-enable @typescript-eslint/no-require-imports */
+        const report = diagnoseCurrentSession()
+        return {
+          type: 'text',
+          value: [
+            'lossless doctor (read-only)',
+            `  messages: ${report.messages}, nodes: ${report.nodes}, corrupt lines: ${report.corruptLines}`,
+            `  uncovered messages: ${report.uncoveredMessages}`,
+            `  nodes with missing children: ${report.badChildren.length}${report.badChildren.length ? ` (${report.badChildren.slice(0, 5).join(', ')})` : ''}`,
+            '  next: no changes were made; repair is not available in this version',
+          ].join('\n'),
+        }
+      } catch (error) {
+        return {
+          type: 'text',
+          value: `lossless doctor failed: ${String(error)}`,
+        }
       }
+    }
 
     case 'help':
       return { type: 'text', value: HELP }

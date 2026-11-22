@@ -88,6 +88,10 @@ import { EnterPlanModeTool } from '@claude-code-best/builtin-tools/tools/EnterPl
 import { EnterWorktreeTool } from '@claude-code-best/builtin-tools/tools/EnterWorktreeTool/EnterWorktreeTool.js'
 import { ExitWorktreeTool } from '@claude-code-best/builtin-tools/tools/ExitWorktreeTool/ExitWorktreeTool.js'
 import { ConfigTool } from '@claude-code-best/builtin-tools/tools/ConfigTool/ConfigTool.js'
+import { LcmDescribeTool } from '@claude-code-best/builtin-tools/tools/LosslessTool/LcmDescribeTool.js'
+import { LcmExpandTool } from '@claude-code-best/builtin-tools/tools/LosslessTool/LcmExpandTool.js'
+import { LcmGrepTool } from '@claude-code-best/builtin-tools/tools/LosslessTool/LcmGrepTool.js'
+import { isLosslessEnabled } from './services/lossless/settings.js'
 const GoalTool = feature('GOAL')
   ? require('@claude-code-best/builtin-tools/tools/GoalTool/GoalTool.js')
       .GoalTool
@@ -271,6 +275,9 @@ export function getAllBaseTools(): Tools {
     ...(ReviewArtifactTool ? [ReviewArtifactTool] : []),
     ...(getPowerShellTool() ? [getPowerShellTool()] : []),
     ...(SnipTool ? [SnipTool] : []),
+    ...(isLosslessEnabled()
+      ? [LcmGrepTool, LcmDescribeTool, LcmExpandTool]
+      : []),
     ...(DiscoverSkillsTool ? [DiscoverSkillsTool] : []),
     ...(process.env.NODE_ENV === 'test' ? [TestingPermissionTool] : []),
     ListMcpResourcesTool,

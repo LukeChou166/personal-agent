@@ -8,6 +8,7 @@ import { getGlobalConfig } from '../../utils/config.js'
 import { getContextWindowForModel } from '../../utils/context.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
+import { isLosslessEnabled } from '../lossless/settings.js'
 import { hasExactErrorMessage } from '../../utils/errors.js'
 import type { CacheSafeParams } from '../../utils/forkedAgent.js'
 import { logError } from '../../utils/log.js'
@@ -303,6 +304,31 @@ export async function autoCompactIfNeeded(
 
   if (!shouldCompact) {
     return { wasCompacted: false }
+  }
+
+  // 无损模式接管上下文管理：分层摘要替代表单层压缩。
+  if (isLosslessEnabled()) {
+    try {
+      /* eslint-disable @typescript-eslint/no-require-imports */
+      const { runLosslessCompaction } =
+        require('../lossless/runtime.js') as typeof import('../lossless/runtime.js')
+      /* eslint-enable @typescript-eslint/no-require-imports */
+      const result = await runLosslessCompaction(
+        messages,
+        toolUseContext,
+        'auto',
+      )
+      runPostCompactCleanup(querySource)
+      markPostCompaction()
+      return {
+        wasCompacted: true,
+        compactionResult: result,
+        consecutiveFailures: 0,
+      }
+    } catch (error) {
+      // 失败时降级到既有压缩路径，不中断对话。
+      logError(error instanceof Error ? error : new Error(String(error)))
+    }
   }
 
   const recompactionInfo: RecompactionInfo = {
