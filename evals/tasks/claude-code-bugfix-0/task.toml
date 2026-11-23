@@ -1,0 +1,33 @@
+# 评测本项目 claude-code 的示例任务：修复一个 Python bug。
+schema_version = "1.3"
+artifacts = []
+
+[task]
+name = "claude-code/bugfix-0"
+description = "修复 /app/buggy.py 中 add 函数的错误实现，使测试通过。"
+authors = [{ name = "claude-code-evals" }]
+keywords = ["claude-code", "python", "bugfix"]
+
+[metadata]
+difficulty = "introductory"
+category = "bugfix"
+
+[verifier]
+timeout_sec = 60.0
+collect = []
+
+[verifier.env]
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+# public 网络：claude-code 需要调用模型 API，source 模式还需 bun install。
+network_mode = "public"
+build_timeout_sec = 600.0
+os = "linux"
+mcp_servers = []
+
+[environment.env]
+
+[solution.env]

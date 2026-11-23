@@ -2,7 +2,6 @@ import type { BetaRawMessageStreamEvent } from '@anthropic-ai/sdk/resources/beta
 import type { ChatCompletionChunk } from 'openai/resources/chat/completions/completions.mjs'
 import { randomUUID } from 'crypto'
 import { normalizeOpenAIUsage } from './openaiUsage.js'
-import { learningLog } from 'src/utils/learningLog.js'
 
 /**
  * Adapt an OpenAI streaming response into Anthropic BetaRawMessageStreamEvent.
@@ -78,7 +77,6 @@ const EMPTY_DELTA: CompatDelta = {}
  *    fall back to the outer object when the inner one has none.
  */
 function toCompatChunk(raw: unknown): CompatChunk {
-  learningLog('openaiStreamAdapter.toCompatChunk start', { raw })
   if (typeof raw !== 'object' || raw === null) return {}
   const outer = raw as Record<string, unknown>
   const body = outer.body
@@ -103,7 +101,6 @@ export async function* adaptOpenAIStreamToAnthropic(
   model: string,
   options?: { includeCacheWriteTokens?: boolean },
 ): AsyncGenerator<BetaRawMessageStreamEvent, void> {
-  learningLog('openaiStreamAdapter.adaptOpenAIStreamToAnthropic start')
   const messageId = `msg_${randomUUID().replace(/-/g, '').slice(0, 24)}`
 
   let started = false
@@ -114,7 +111,6 @@ export async function* adaptOpenAIStreamToAnthropic(
     number,
     { contentIndex: number; id: string; name: string; arguments: string }
   >()
-  learningLog('openaiStreamAdapter.toolBlocks start', { toolBlocks })
   // Index of the currently open thinking / text block, or -1 when none is open.
   //
   // These MUST be tracked separately rather than as two booleans plus a shared
@@ -177,9 +173,6 @@ export async function* adaptOpenAIStreamToAnthropic(
     const delta = choice?.delta ?? choice?.message
 
     // Extract usage from any chunk that carries it.
-    learningLog('openaiStreamAdapter.adaptOpenAIStreamToAnthropic chunk', {
-      chunk,
-    })
     if (chunk.usage) {
       rawInputTokens = chunk.usage.prompt_tokens ?? rawInputTokens
       outputTokens = chunk.usage.completion_tokens ?? outputTokens

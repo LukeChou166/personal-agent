@@ -5,6 +5,7 @@ import {
 } from '@claude-code-best/workflow-engine'
 import type { Command } from '../types/command.js'
 import { getProjectRoot } from '../bootstrap/state.js'
+import { learningLog } from 'src/utils/learningLog.js'
 
 /** Scan *.ts|*.js|*.mjs under .claude/workflows/ and generate a /<name> command for each. */
 export async function getWorkflowCommands(
@@ -12,6 +13,7 @@ export async function getWorkflowCommands(
 ): Promise<Command[]> {
   const dir = join(cwd, WORKFLOW_DIR_NAME)
   const names = await listNamedWorkflows(dir)
+  learningLog('namedWorkflowCommands.getWorkflowCommands', { dir, names })
   return names.map(name => ({
     type: 'prompt',
     name,

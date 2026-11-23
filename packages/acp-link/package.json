@@ -2,7 +2,7 @@
   "name": "acp-link",
   "version": "2.0.0",
   "description": "ACP proxy server that bridges WebSocket clients to ACP agents",
-  "author": "claude-code-best",
+  "author": "Luke <1871759919@qq.com>",
   "type": "module",
   "main": "./dist/server.js",
   "types": "./dist/server.d.ts",
