@@ -186,6 +186,7 @@ import files from './commands/files/index.js'
 import branch from './commands/branch/index.js'
 import artifacts from './commands/artifacts/index.js'
 import agents from './commands/agents/index.js'
+import agent from './commands/agent/index.js'
 import plugin from './commands/plugin/index.js'
 import reloadPlugins from './commands/reload-plugins/index.js'
 import rewind from './commands/rewind/index.js'
@@ -317,6 +318,7 @@ const COMMANDS = memoize((): Command[] => [
   provider,
   artifacts,
   agents,
+  agent,
   branch,
   btw,
   chrome,

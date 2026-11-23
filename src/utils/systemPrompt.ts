@@ -56,13 +56,20 @@ export function buildEffectiveSystemPrompt({
   if (overrideSystemPrompt) {
     return asSystemPrompt([overrideSystemPrompt])
   }
+
+  // Check if there's an active agent from agent mode (runtime switch via /agent command)
+  // This takes priority over mainThreadAgentDefinition
+  const { getCurrentAgentDefinition } = require('../agentMode/agentMode.js')
+  const activeAgentDefinition = getCurrentAgentDefinition()
+  const effectiveAgentDefinition =
+    activeAgentDefinition ?? mainThreadAgentDefinition
   // Coordinator mode: use coordinator prompt instead of default
   // Use inline env check instead of coordinatorModule to avoid circular
   // dependency issues during test module loading.
   if (
     feature('COORDINATOR_MODE') &&
     isEnvTruthy(process.env.CLAUDE_CODE_COORDINATOR_MODE) &&
-    !mainThreadAgentDefinition
+    !effectiveAgentDefinition
   ) {
     // Lazy require to avoid circular dependency at module load time
     const { getCoordinatorSystemPrompt } =
@@ -74,23 +81,23 @@ export function buildEffectiveSystemPrompt({
     ])
   }
 
-  const agentSystemPrompt = mainThreadAgentDefinition
-    ? isBuiltInAgent(mainThreadAgentDefinition)
-      ? mainThreadAgentDefinition.getSystemPrompt({
+  const agentSystemPrompt = effectiveAgentDefinition
+    ? isBuiltInAgent(effectiveAgentDefinition)
+      ? effectiveAgentDefinition.getSystemPrompt({
           toolUseContext: { options: toolUseContext.options },
         })
-      : mainThreadAgentDefinition.getSystemPrompt()
+      : effectiveAgentDefinition.getSystemPrompt()
     : undefined
 
   // Log agent memory loaded event for main loop agents
-  if (mainThreadAgentDefinition?.memory) {
+  if (effectiveAgentDefinition?.memory) {
     logEvent('tengu_agent_memory_loaded', {
       ...(process.env.USER_TYPE === 'ant' && {
         agent_type:
-          mainThreadAgentDefinition.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+          effectiveAgentDefinition.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       }),
       scope:
-        mainThreadAgentDefinition.memory as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+        effectiveAgentDefinition.memory as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       source:
         'main-thread' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     })

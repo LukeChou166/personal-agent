@@ -27,7 +27,11 @@ evals/
 ## 前置条件
 
 1. 安装 [uv](https://docs.astral.sh/uv/) 和 Docker。
-2. 准备模型 API key（宿主机导出，agent 会透传到容器）：
+2. 准备模型与 API key（二选一）：
+
+   - 直接用宿主机 settings：agent 会自动把 `~/.claude/settings.json` 透传进容器，
+     其中的 `model` / `apiKey` 都会生效（见下方「模型配置」）。
+   - 或用环境变量显式指定：
 
    ```bash
    export ANTHROPIC_API_KEY=sk-ant-...
@@ -87,11 +91,29 @@ uv run harbor run -p ./tasks/claude-code-bugfix-0 \
 |------|------|
 | `-p/--path` | 本地任务目录 |
 | `-a/--agent` | agent 名称，或自定义 agent 的 `module:Class` 路径 |
-| `-m/--model` | 模型（本项目通过 `ANTHROPIC_MODEL` 接收） |
+| `-m/--model` | 模型（可省略，省略时用 settings 里的 model） |
 | `--ak/--agent-kwarg` | 传给 agent 构造器，如 `dist_dir=` / `source_dir=` |
 | `--ae/--agent-env` | 透传环境变量，如 `--ae CLAUDE_CODE_USE_OPENAI=1` |
 | `--job-name` | job 目录名（不传则用时间戳） |
 | `-n/--n-concurrent`、`-k/--n-attempts` | 并发数 / 每任务尝试次数 |
+
+### 模型配置：`-m` 可省略
+
+本项目 claude-code 的模型读取优先级是 `--model` > `ANTHROPIC_MODEL` > `settings.model` > 默认。
+
+Harbor 里 claude-code 跑在 Docker 容器内，读不到宿主机 `~/.claude/settings.json`，因此：
+
+- **省略 `-m`（用 settings）**：agent 会自动把宿主机 `~/.claude/settings.json`
+  透传进容器（或 `--ak settings_path=/path/to/settings.json` 显式指定），容器内按
+  `settings.model` 选模型：
+
+  ```bash
+  uv run harbor run -p ./tasks/claude-code-bugfix-0 \
+    -a claude_code_agent:ClaudeCodeSelfHostAgent \
+    --ak dist_dir=/Users/zhouli/Documents/work_space/claude-code/dist
+  ```
+
+- **显式 `-m`**：优先级高于 settings，会覆盖 settings 里的模型（命令见上文方式 A/B）。
 
 ## 查看结果
 
