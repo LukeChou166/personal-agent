@@ -70,7 +70,6 @@ reward 应为 `1`。
 ```bash
 uv run harbor run -p ./tasks/claude-code-bugfix-0 \
   -a claude_code_agent:ClaudeCodeSelfHostAgent \
-  -m anthropic/claude-sonnet-4-5 \
   --ak dist_dir=/Users/zhouli/Documents/work_space/claude-code/dist \
   --job-name claude-code-bugfix-0
 ```
@@ -80,7 +79,6 @@ uv run harbor run -p ./tasks/claude-code-bugfix-0 \
 ```bash
 uv run harbor run -p ./tasks/claude-code-bugfix-0 \
   -a claude_code_agent:ClaudeCodeSelfHostAgent \
-  -m anthropic/claude-sonnet-4-5 \
   --ak source_dir=/Users/zhouli/Documents/work_space/claude-code \
   --job-name claude-code-bugfix-0
 ```
@@ -113,7 +111,15 @@ Harbor 里 claude-code 跑在 Docker 容器内，读不到宿主机 `~/.claude/s
     --ak dist_dir=/Users/zhouli/Documents/work_space/claude-code/dist
   ```
 
-- **显式 `-m`**：优先级高于 settings，会覆盖 settings 里的模型（命令见上文方式 A/B）。
+- **显式 `-m`**：优先级高于 settings，会覆盖 settings 里的模型（格式如
+  `anthropic/claude-sonnet-4-5`）：
+
+  ```bash
+  uv run harbor run -p ./tasks/claude-code-bugfix-0 \
+    -a claude_code_agent:ClaudeCodeSelfHostAgent \
+    -m <模型名> \
+    --ak dist_dir=/Users/zhouli/Documents/work_space/claude-code/dist
+  ```
 
 ## 查看结果
 
