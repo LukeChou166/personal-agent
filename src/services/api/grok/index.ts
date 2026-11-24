@@ -42,6 +42,7 @@ import {
   createAssistantAPIErrorMessage,
   normalizeContentFromAPI,
 } from '../../../utils/messages.js'
+import { learningLog } from 'src/utils/learningLog.js'
 
 /**
  * Grok (xAI) query path. Grok uses an OpenAI-compatible API, so we reuse
@@ -95,7 +96,7 @@ export async function* queryModelGrok(
       source: options.querySource,
     })
 
-    logForDebugging(
+    learningLog(
       `[Grok] Calling model=${grokModel}, messages=${openaiMessages.length}, tools=${openaiTools.length}`,
     )
 

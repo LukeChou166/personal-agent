@@ -22,6 +22,7 @@ import { formatFileSize } from './format.js'
 import { logError } from './log.js'
 import { getProjectDir } from './sessionStorage.js'
 import { jsonStringify } from './slowOperations.js'
+import { learningLog } from './learningLog.js'
 
 // Subdirectory name for tool results within a session
 export const TOOL_RESULTS_SUBDIR = 'tool-results'
@@ -928,7 +929,7 @@ export async function applyToolResultBudget(
   writeToTranscript?: (records: ToolResultReplacementRecord[]) => void,
   skipToolNames?: ReadonlySet<string>,
 ): Promise<Message[]> {
-  learninLog('')
+  learningLog('applyToolResultBudget.messages', { messages })
   if (!state) return messages
   const result = await enforceToolResultBudget(messages, state, skipToolNames)
   if (result.newlyReplaced.length > 0) {

@@ -1,16 +1,16 @@
 {
-  "name": "claude-code-best",
+  "name": "personal-agent",
   "version": "2.8.4",
   "description": "Reverse-engineered Anthropic Claude Code CLI — interactive AI coding assistant in the terminal",
   "type": "module",
-  "author": "claude-code-best <claude-code-best@proton.me>",
+  "author": "Luke <1871759919@qq.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/claude-code-best/claude-code.git"
+    "url": "git+https://github.com/LukeChou166/personal-agent.git"
   },
-  "homepage": "https://github.com/claude-code-best/claude-code#readme",
+  "homepage": "https://github.com/LukeChou166/personal-agent#readme",
   "bugs": {
-    "url": "https://github.com/claude-code-best/claude-code/issues"
+    "url": "https://github.com/LukeChou166/personal-agent/issues"
   },
   "keywords": [
     "claude",
@@ -27,7 +27,7 @@
   "bin": {
     "ccb": "dist/cli-node.js",
     "ccb-bun": "dist/cli-bun.js",
-    "claude-code-best": "dist/cli-node.js"
+    "personal-agent": "dist/cli-node.js"
   },
   "workspaces": [
     "packages/*",

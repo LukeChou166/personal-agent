@@ -298,7 +298,7 @@ export async function* query(
   // When called as a sub-agent, langfuseTrace is already set by runAgent()
   // — reuse it instead of creating an independent trace.
   const ownsTrace = !params.toolUseContext.langfuseTrace
-  logForDebugging(
+  learningLog(
     `[query] ownsTrace=${ownsTrace} incoming langfuseTrace=${params.toolUseContext.langfuseTrace ? 'present' : 'null/undefined'} isLangfuseEnabled=${isLangfuseEnabled()}`,
   )
   const langfuseTrace =
@@ -320,7 +320,7 @@ export async function* query(
         toolUseContext: { ...params.toolUseContext, langfuseTrace },
       }
     : params
-
+  // `terminal` 这个变量，**要么是一个 Terminal 对象，要么是 undefined**；初始还没有赋值的时候，它的值就是 `undefined`
   let terminal: Terminal | undefined
   let didThrow = false
   let thrownError: unknown
@@ -1668,13 +1668,13 @@ async function* queryLoop(
     })
 
     if (streamingToolExecutor) {
-      logEvent('tengu_streaming_tool_execution_used', {
+      learningLog('tengu_streaming_tool_execution_used', {
         tool_count: toolUseBlocks.length,
         queryChainId: queryChainIdForAnalytics,
         queryDepth: queryTracking.depth,
       })
     } else {
-      logEvent('tengu_streaming_tool_execution_not_used', {
+      learningLog('tengu_streaming_tool_execution_not_used', {
         tool_count: toolUseBlocks.length,
         queryChainId: queryChainIdForAnalytics,
         queryDepth: queryTracking.depth,

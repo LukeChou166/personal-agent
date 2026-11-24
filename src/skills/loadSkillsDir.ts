@@ -63,6 +63,7 @@ import { isRestrictedToPluginOnly } from '../utils/settings/pluginOnlyPolicy.js'
 import { HooksSchema, type HooksSettings } from '../utils/settings/types.js'
 import { createSignal } from '../utils/signal.js'
 import { registerMCPSkillBuilders } from './mcpSkillBuilders.js'
+import { learningLog } from 'src/utils/learningLog.js'
 
 export type LoadedFrom =
   | 'commands_DEPRECATED'
@@ -641,7 +642,7 @@ export const getSkillDirCommands = memoize(
     const managedSkillsDir = join(getManagedFilePath(), '.claude', 'skills')
     const projectSkillsDirs = getProjectDirsUpToHome('skills', cwd)
 
-    logForDebugging(
+    learningLog(
       `Loading skills from: managed=${managedSkillsDir}, user=${userSkillsDir}, project=[${projectSkillsDirs.join(', ')}]`,
     )
 

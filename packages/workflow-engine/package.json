@@ -4,15 +4,15 @@
   "description": "Deterministic JS script orchestration engine for multi-agent workflows. Zero core-layer runtime dependencies; talks to the world via port adapters.",
   "type": "module",
   "license": "MIT",
-  "author": "claude-code-best <claude-code-best@proton.me>",
-  "homepage": "https://github.com/claude-code-best/claude-code/tree/main/packages/workflow-engine#readme",
+  "author": "Luke <1871759919@qq.com>",
+  "homepage": "https://github.com/LukeChou166/personal-agent/tree/main/packages/workflow-engine#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/claude-code-best/claude-code.git",
+    "url": "git+https://github.com/LukeChou166/personal-agent.git",
     "directory": "packages/workflow-engine"
   },
   "bugs": {
-    "url": "https://github.com/claude-code-best/claude-code/issues"
+    "url": "https://github.com/LukeChou166/personal-agent/issues"
   },
   "keywords": [
     "workflow",

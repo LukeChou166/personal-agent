@@ -1288,31 +1288,6 @@ async function* queryModel(
     return
   }
 
-  if (getAPIProvider() === 'gemini') {
-    const { queryModelGemini } = await import('./gemini/index.js')
-    yield* queryModelGemini(
-      messagesForAPI,
-      systemPrompt,
-      filteredTools,
-      signal,
-      options,
-      thinkingConfig,
-    )
-    return
-  }
-
-  if (getAPIProvider() === 'grok') {
-    const { queryModelGrok } = await import('./grok/index.js')
-    yield* queryModelGrok(
-      messagesForAPI,
-      systemPrompt,
-      filteredTools,
-      signal,
-      options,
-    )
-    return
-  }
-
   // Instrumentation: Track message count after normalization
   logEvent('tengu_api_after_normalize', {
     postNormalizedMessageCount: messagesForAPI.length,

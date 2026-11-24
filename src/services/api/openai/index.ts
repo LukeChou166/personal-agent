@@ -67,7 +67,6 @@ import {
   createUserMessage,
   normalizeContentFromAPI,
 } from '../../../utils/messages.js'
-import type { SDKAssistantMessageError } from '../../../entrypoints/agentSdkTypes.js'
 import {
   isSearchExtraToolsEnabled,
   isDeferredToolsDeltaEnabled,
@@ -228,7 +227,14 @@ export async function* queryModelOpenAI(
   StreamEvent | AssistantMessage | SystemAPIErrorMessage,
   void
 > {
+  learningLog('index.queryModelOpenAI', {
+    messages,
+    systemPrompt,
+    tools,
+    options,
+  })
   try {
+    learningLog('index.queryModelOpenAI start')
     // 1. Resolve model name
     const openaiModel = resolveOpenAIModel(options.model)
 
@@ -320,11 +326,11 @@ export async function* queryModelOpenAI(
       const includedDeferredTools = filteredTools.filter(t =>
         deferredToolNames.has(t.name),
       ).length
-      logForDebugging(
+      learningLog(
         `[OpenAI] Tool search enabled: ${includedDeferredTools}/${deferredToolNames.size} deferred tools included, total tools=${openaiTools.length}`,
       )
     } else {
-      logForDebugging(
+      learningLog(
         `[OpenAI] Tool search disabled, total tools=${openaiTools.length}`,
       )
     }
@@ -427,6 +433,7 @@ export async function* queryModelOpenAI(
     const start = Date.now()
 
     for await (const event of adaptedStream) {
+      learningLog('index event', { type: event.type })
       switch (event.type) {
         case 'message_start': {
           partialMessage = event.message
@@ -570,13 +577,13 @@ export async function* queryModelOpenAI(
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    logForDebugging(`[OpenAI] Error: ${errorMessage}`, { level: 'error' })
+    learningLog(`[OpenAI] Error: ${errorMessage}`, { level: 'error' })
+    // 把错误直接输出到终端 stderr，确保 headless / 非交互模式下用户也能看到具体错误
+    process.stderr.write(`API Error: ${errorMessage}\n`)
     yield createAssistantAPIErrorMessage({
       content: `API Error: ${errorMessage}`,
       apiError: 'api_error',
-      error: (error instanceof Error
-        ? error
-        : new Error(String(error))) as unknown as SDKAssistantMessageError,
+      error: 'unknown',
     })
   }
 }
