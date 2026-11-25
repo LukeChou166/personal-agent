@@ -885,6 +885,16 @@ export async function getAttachments(
     maybe('ultrathink_effort', () =>
       Promise.resolve(getUltrathinkEffortAttachment(input)),
     ),
+    // skill_listing must precede the capability-delta attachments
+    // (deferred_tools_delta / agent_listing_delta / mcp_instructions_delta).
+    // These all collapse into the single leading user message that forms the
+    // cached prompt prefix. skill_listing is a stable, turn-0-only
+    // announcement, whereas the deltas are mutable and re-fire when tools /
+    // agents / MCP servers change. Emitting the stable skills listing first
+    // keeps it anchored at the head of the prefix; putting it after the
+    // deltas would push it past the changing tool/agent blocks and invalidate
+    // the prompt cache every time a delta fires.
+    maybe('skill_listing', () => getSkillListingAttachments(context)),
     maybe('deferred_tools_delta', () =>
       Promise.resolve(
         getDeferredToolsDeltaAttachment(
@@ -924,7 +934,6 @@ export async function getAttachments(
     maybe('nested_memory', () => getNestedMemoryAttachments(context)),
     // relevant_memories moved to async prefetch (startRelevantMemoryPrefetch)
     maybe('dynamic_skill', () => getDynamicSkillAttachments(context)),
-    maybe('skill_listing', () => getSkillListingAttachments(context)),
     // Inter-turn skill discovery now runs via startSkillDiscoveryPrefetch
     // (query.ts, concurrent with the main turn). The blocking call that
     // previously lived here was the assistant_turn signal — 97% of those
