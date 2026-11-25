@@ -48,6 +48,7 @@ model: haiku
 - `description` → `whenToUse`，告诉模型"什么时候用我"；
 - `tools` → 白名单，这个 agent 只能用这些工具；
 - `disallowedTools` → 黑名单，这个 agent 不能用这些工具；
+- `isGitStatus` → 布尔值，控制是否把 git status 信息注入 system prompt（默认不注入，省 token）；
 - 正文 → `getSystemPrompt()` 返回的内容。
 
 这些文件由 `packages/builtin-tools/src/tools/AgentTool/loadAgentsDir.ts` 统一解析成 `AgentDefinition` 对象。
@@ -344,3 +345,39 @@ claude -p "hello" --agent minimal-agent --verbose
 1. **两套 agent 状态并存**：`agentMode` 模块的 `currentAgentDefinition`（供 `/agent名` slash 命令运行时切换）与 `bootstrap/state.ts` 的 `mainThreadAgentType`（供 CLI 参数）是两套独立状态。本次通过"非交互也走 `resolveAgentTools`"让工具裁剪两边都覆盖，但没有合并这两套状态——合并会引入交互模式双重裁剪风险（`filterToolsForActiveAgent` 的 `toolMatchesName` 不支持 `Agent(user)` 这类带参工具格式，与 `resolveAgentTools` 的解析规则不同），因此刻意不合并。
 
 2. **system prompt 优先级不一致**：交互模式下 `agent prompt` 优先于 `--system-prompt`（`systemPrompt.ts:122-129`）；非交互模式下 `--system-prompt` 优先于 agent prompt（`main.tsx:2608` 的 `!systemPrompt`）。这是历史遗留的语义分叉，涉及产品决策，本次未改动，仅在此记录。
+
+---
+
+## 7. git status 注入与 `isGitStatus` 配置
+
+### 7.1 git status 是怎么进 system prompt 的（注入链路）
+
+git status 信息（当前分支、最近提交等）的注入链路：
+
+`getGitStatus()`（`context.ts:36`）→ 执行 git 命令生成状态文本 → `getSystemContext()`（`context.ts:116`）把它放进返回值 `{ gitStatus }` → `query.ts:668-670` 调 `appendSystemContext(systemPrompt, systemContext)` → 渲染成 `gitStatus: xxx` 拼到 system prompt 末尾 → 发给模型。
+
+而 `setSystemPromptInjection()`（`context.ts:29`）是**另一条独立的注入机制**，用于 cache breaking（ant-only 调试）：
+
+`setSystemPromptInjection('xxx')` → 写模块级变量 `systemPromptInjection`（`context.ts:23`）→ 下次 `getSystemContext()` 读取（`context.ts:131-133`）→ 返回 `{ cacheBreaker: '[CACHE_BREAKER: xxx]' }` → `appendSystemContext` 拼成 `cacheBreaker: [CACHE_BREAKER: xxx]` 进 system prompt。
+
+两者区别：`gitStatus` 是正常 git 上下文（每次会话生成一次）；`cacheBreaker`（`setSystemPromptInjection`）是 feature gate `BREAK_CACHE_COMMAND` 下的调试注入，用于强制打破 prompt 缓存。
+
+### 7.2 `isGitStatus` 配置
+
+agent 的 frontmatter 加 `isGitStatus`，控制该 agent 是否注入 git status：
+
+```markdown
+---
+name: minimal-agent
+description: 只读 agent，不需要 git 上下文
+tools: Read, Grep
+isGitStatus: false   # 不注入 git status（省 token）
+---
+```
+
+语义：**没写 `isGitStatus`** → 不注入（默认）；**`isGitStatus: true`** → 注入；**`isGitStatus: false`** → 不注入。
+
+实现位置：
+- 字段解析：`loadAgentsDir.ts`（`AgentJsonSchema` / `BaseAgentDefinition` / `parseAgentFromMarkdown` / JSON 解析）加 `isGitStatus?: boolean`；
+- 生效点：`context.ts:getSystemContext()` 读 `getCurrentAgentDefinition()`，当 agent 存在且 `isGitStatus !== true` 时跳过 `getGitStatus()`；
+- `--agent` 入口：`main.tsx:2585` 补 `setCurrentAgentDefinition()`，让 `--agent` 与 `/agent名` 共用同一套 agent 状态，`isGitStatus` 对两种入口都生效。

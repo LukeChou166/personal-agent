@@ -120,10 +120,18 @@ export const getSystemContext = memoize(
     const startTime = Date.now()
     logForDiagnosticsNoPII('info', 'system_context_started')
 
-    // Skip git status in CCR (unnecessary overhead on resume) or when git instructions are disabled
+    // 当前激活的 agent（通过 /agent名 或 --agent 指定）
+    const { getCurrentAgentDefinition } = require('./agentMode/agentMode.js')
+    const activeAgent = getCurrentAgentDefinition()
+
+    // Skip git status in CCR (unnecessary overhead on resume) or when git instructions are disabled,
+    // 或者当前 agent 未显式声明 isGitStatus: true 时跳过（默认不注入，省 token）
+    const shouldSkipGitStatus =
+      activeAgent !== null && activeAgent.isGitStatus !== true
     const gitStatus =
       isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) ||
-      !shouldIncludeGitInstructions()
+      !shouldIncludeGitInstructions() ||
+      shouldSkipGitStatus
         ? null
         : await getGitStatus()
 
