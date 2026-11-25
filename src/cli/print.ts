@@ -38,6 +38,7 @@ import {
   isBuiltInAgent,
   parseAgentsFromJson,
 } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import { resolveAgentTools } from '@claude-code-best/builtin-tools/tools/AgentTool/agentToolUtils.js'
 import type { Message, NormalizedUserMessage } from 'src/types/message.js'
 import type { QueuedCommand } from 'src/types/textInputTypes.js'
 import {
@@ -1496,6 +1497,17 @@ function runHeadlessStreaming(
     configs: {},
   }
 
+  // Resolve the main-thread agent definition for headless tool filtering.
+  // main.tsx already applied the agent's systemPrompt/model/initialPrompt for
+  // the initial --agent path, but tool pruning (tools/disallowedTools
+  // frontmatter) happens here — interactive mode does it in REPL.tsx via
+  // resolveAgentTools. getMainThreadAgentType() covers all three entry paths:
+  // CLI --agent, settings agent, and resumed-session agent (sessionRestore).
+  const mainAgentType = options.agent ?? getMainThreadAgentType()
+  const mainThreadAgentDefinition = mainAgentType
+    ? agents.find(a => a.agentType === mainAgentType)
+    : undefined
+
   // Shared tool assembly for ask() and the get_context_usage control request.
   // Closes over the mutable sdkTools/dynamicMcpState bindings so both call
   // sites see late-connecting servers.
@@ -1516,6 +1528,16 @@ function runHeadlessStreaming(
       allTools = allTools.filter(
         tool => !toolMatchesName(tool, options.permissionPromptToolName!),
       )
+    }
+    // Apply the main-thread agent's tools/disallowedTools so non-interactive
+    // sessions honor the agent's tool allow-list. isMainThread=true skips the
+    // sub-agent disallow gates (same as REPL.tsx); SyntheticOutputTool is added
+    // after this so it stays exempt from agent filtering.
+    if (mainThreadAgentDefinition) {
+      allTools = [
+        ...resolveAgentTools(mainThreadAgentDefinition, allTools, false, true)
+          .resolvedTools,
+      ]
     }
     const initJsonSchema = getInitJsonSchema()
     if (initJsonSchema && !options.jsonSchema) {

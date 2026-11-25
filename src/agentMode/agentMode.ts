@@ -1,4 +1,7 @@
-import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import {
+  isBuiltInAgent,
+  type AgentDefinition,
+} from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import type { Tool, Tools } from '../Tool.js'
 import { toolMatchesName } from '../Tool.js'
 
@@ -68,6 +71,11 @@ export function getActiveAgentDisallowedTools(): string[] | undefined {
  */
 export function getActiveAgentSystemPrompt(): string | null {
   if (!currentAgentDefinition) {
+    return null
+  }
+  // Built-in agents build their prompt from toolUseContext, which isn't
+  // available here (main-thread agent mode has no tool-use context to pass).
+  if (isBuiltInAgent(currentAgentDefinition)) {
     return null
   }
   return currentAgentDefinition.getSystemPrompt()
