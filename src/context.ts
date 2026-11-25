@@ -16,6 +16,7 @@ import { execFileNoThrow } from './utils/execFileNoThrow.js'
 import { getBranch, getDefaultBranch, getIsGit, gitExe } from './utils/git.js'
 import { shouldIncludeGitInstructions } from './utils/gitSettings.js'
 import { logError } from './utils/log.js'
+import { learningLog } from './utils/learningLog.js'
 
 const MAX_STATUS_CHARS = 1000
 
@@ -40,6 +41,7 @@ export const getGitStatus = memoize(async (): Promise<string | null> => {
   }
 
   const startTime = Date.now()
+  learningLog('context.getGitStatus.startTime', { getGitStatus })
   logForDiagnosticsNoPII('info', 'git_status_started')
 
   const isGitStart = Date.now()
@@ -128,6 +130,7 @@ export const getSystemContext = memoize(
     // 或者当前 agent 未显式声明 isGitStatus: true 时跳过（默认不注入，省 token）
     const shouldSkipGitStatus =
       activeAgent !== null && activeAgent.isGitStatus !== true
+    learningLog('context.shouldSkipGitStatus', { shouldSkipGitStatus })
     const gitStatus =
       isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) ||
       !shouldIncludeGitInstructions() ||

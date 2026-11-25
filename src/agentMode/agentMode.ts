@@ -31,6 +31,12 @@ export function getCurrentAgentDefinition(): AgentDefinition | null {
  */
 export function setCurrentAgentDefinition(agent: AgentDefinition | null): void {
   currentAgentDefinition = agent
+  // 清除 system context 缓存，让 git status 注入逻辑在切换 agent 后重新生效。
+  // getSystemContext 是 memoize 的：启动时 prefetch 会在设置 agent 之前执行一次，
+  // 若不清缓存，query 阶段会直接返回旧的「已注入 git status」结果，导致
+  // isGitStatus 跳过逻辑失效。这里用动态 require 避免顶层循环依赖。
+  const { getSystemContext } = require('../context.js')
+  getSystemContext.cache.clear?.()
 }
 
 /**
