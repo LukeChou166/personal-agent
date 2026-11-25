@@ -393,7 +393,7 @@ export function assembleToolPool(
   // Filter out MCP tools that are in the deny list
   const allowedMcpTools = filterToolsByDenyRules(mcpTools, permissionContext)
 
-  // Apply agent-based tool filtering
+  // 应用 agent 级别的工具过滤
   const { filterToolsForActiveAgent } = require('./agentMode/agentMode.js')
   const agentFilteredBuiltIn = filterToolsForActiveAgent(builtInTools)
   const agentFilteredMcp = filterToolsForActiveAgent(allowedMcpTools)

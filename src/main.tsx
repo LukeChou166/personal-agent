@@ -143,6 +143,7 @@ import {
   setMainThreadAgentType,
   setTeleportedSessionInfo,
 } from './bootstrap/state.js';
+import { setCurrentAgentDefinition } from './agentMode/agentMode.js';
 import { filterCommandsForRemoteMode, getCommands } from './commands.js';
 import type { StatsStore } from './context/stats.js';
 import {
@@ -2582,6 +2583,9 @@ async function run(): Promise<CommanderCommand> {
 
       // Store the main thread agent type in bootstrap state so hooks can access it
       setMainThreadAgentType(mainThreadAgentDefinition?.agentType);
+      // 同步设置 agentMode 的当前 agent，让 system prompt / 工具 / git status 等
+      // 都能感知主线程 agent（--agent 与 /agent名 共用同一套状态）
+      setCurrentAgentDefinition(mainThreadAgentDefinition ?? null);
 
       // Log agent flag usage — only log agent name for built-in agents to avoid leaking custom agent names
       if (mainThreadAgentDefinition) {

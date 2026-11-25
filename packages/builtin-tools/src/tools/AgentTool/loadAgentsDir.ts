@@ -91,6 +91,7 @@ const AgentJsonSchema = lazySchema(() =>
     initialPrompt: z.string().optional(),
     memory: z.enum(['user', 'project', 'local']).optional(),
     background: z.boolean().optional(),
+    isGitStatus: z.boolean().optional(),
     isolation: (process.env.USER_TYPE === 'ant'
       ? z.enum(['worktree', 'remote'])
       : z.enum(['worktree'])
@@ -121,6 +122,7 @@ export type BaseAgentDefinition = {
   criticalSystemReminder_EXPERIMENTAL?: string // Short message re-injected at every user turn
   requiredMcpServers?: string[] // MCP server name patterns that must be configured for agent to be available
   background?: boolean // Always run as background task when spawned
+  isGitStatus?: boolean // 是否注入 git status 信息到 system prompt（默认不注入）
   initialPrompt?: string // Prepended to the first user turn (slash commands work)
   memory?: AgentMemoryScope // Persistent memory scope
   isolation?: 'worktree' | 'remote' // Run in an isolated git worktree, or remotely in CCR (ant-only)
@@ -503,6 +505,9 @@ export function parseAgentFromJson(
         : {}),
       ...(parsed.initialPrompt ? { initialPrompt: parsed.initialPrompt } : {}),
       ...(parsed.background ? { background: parsed.background } : {}),
+      ...(parsed.isGitStatus !== undefined
+        ? { isGitStatus: parsed.isGitStatus }
+        : {}),
       ...(parsed.memory ? { memory: parsed.memory } : {}),
       ...(parsed.isolation ? { isolation: parsed.isolation } : {}),
     }
@@ -590,6 +595,22 @@ export function parseAgentFromMarkdown(
 
     const background =
       backgroundRaw === 'true' || backgroundRaw === true ? true : undefined
+
+    // 解析 isGitStatus 标志（是否注入 git status 信息，默认不注入）
+    const isGitStatusRaw = frontmatter['isGitStatus']
+    if (
+      isGitStatusRaw !== undefined &&
+      isGitStatusRaw !== 'true' &&
+      isGitStatusRaw !== 'false' &&
+      isGitStatusRaw !== true &&
+      isGitStatusRaw !== false
+    ) {
+      logForDebugging(
+        `Agent file ${filePath} has invalid isGitStatus value '${isGitStatusRaw}'. Must be 'true', 'false', or omitted.`,
+      )
+    }
+    const isGitStatus =
+      isGitStatusRaw === 'true' || isGitStatusRaw === true ? true : undefined
 
     // Parse memory scope
     const VALID_MEMORY_SCOPES: AgentMemoryScope[] = ['user', 'project', 'local']
@@ -743,6 +764,7 @@ export function parseAgentFromMarkdown(
         : {}),
       ...(maxTurns !== undefined ? { maxTurns } : {}),
       ...(background ? { background } : {}),
+      ...(isGitStatus !== undefined ? { isGitStatus } : {}),
       ...(memory ? { memory } : {}),
       ...(isolation ? { isolation } : {}),
     }

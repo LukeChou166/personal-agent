@@ -57,8 +57,8 @@ export function buildEffectiveSystemPrompt({
     return asSystemPrompt([overrideSystemPrompt])
   }
 
-  // Check if there's an active agent from agent mode (runtime switch via /agent command)
-  // This takes priority over mainThreadAgentDefinition
+  // 检查 agent 模式下是否有当前激活的 agent（通过 /agent名 slash 命令运行时切换）
+  // 它优先于 mainThreadAgentDefinition
   const { getCurrentAgentDefinition } = require('../agentMode/agentMode.js')
   const activeAgentDefinition = getCurrentAgentDefinition()
   const effectiveAgentDefinition =
