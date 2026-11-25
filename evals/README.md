@@ -1,4 +1,4 @@
-# claude-code evals — 从零跑通指南
+# gwy-jobs-match evals — 从零跑通指南
 
 用 [Harbor](https://harborframework.com/) 框架评测本项目（reverse-engineered 的
 claude-code CLI）的 benchmark。结构与 Stanford CS329Z 的 assignment2-evals 对齐，

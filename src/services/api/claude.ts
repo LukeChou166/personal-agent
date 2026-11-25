@@ -1038,12 +1038,11 @@ export function stripExcessMediaItems(
 }
 
 /**
- * Module-level cache of deferred-tool lines that have already been announced
- * via <available-deferred-tools>. Because the injection is ephemeral (appended
- * to a local `messagesForAPI` that is never persisted back into the caller's
- * message history), we cannot scan history to detect prior injections — the
- * injected message is gone after each API call. Instead we keep this Set so we
- * only re-inject when new deferred tools appear (e.g. MCP server connects).
+ * 已通过 <available-deferred-tools> 公告过的 deferred 工具行缓存。由于注入是
+ * 临时的（prepend 到本地 `messagesForAPI`，从不回写进调用方的 message 历史），
+ * 无法通过扫描历史来识别之前的注入——注入的 message 在每次 API 调用后即消失。
+ * 因此用这个 Set 记录，只在新的 deferred 工具出现（如 MCP server 中途连接）时才
+ * 重新注入。
  */
 const lastAnnouncedDeferredTools = new Set<string>()
 
@@ -1293,13 +1292,11 @@ async function* queryModel(
     postNormalizedMessageCount: messagesForAPI.length,
   })
 
-  // When the delta attachment is enabled, deferred tools are announced
-  // via persisted deferred_tools_delta attachments instead of this
-  // ephemeral prepend (which busts cache whenever the pool changes).
+  // 当 delta 附件启用时，deferred 工具通过持久化的 deferred_tools_delta 附件
+  // 公告，而不是这里的临时 prepend（临时 prepend 会在工具池变化时使缓存失效）。
   if (useSearchExtraTools && !isDeferredToolsDeltaEnabled()) {
-    // Diff current deferred tools against what's already been announced in
-    // prior <available-deferred-tools> injections. Only re-inject when new
-    // tools appear (e.g. MCP server connects mid-session).
+    // 将当前 deferred 工具与之前 <available-deferred-tools> 注入中已公告的集合
+    // 做差集，只在出现新工具时（如 MCP server 中途连接）才重新注入。
     const deferredToolList = tools
       .filter(t => deferredToolNames.has(t.name))
       .map(formatDeferredToolLine)
@@ -1317,20 +1314,19 @@ async function* queryModel(
         for (const t of currentTools) lastAnnouncedDeferredTools.add(t)
 
         messagesForAPI = [
-          ...messagesForAPI,
           createUserMessage({
             content: `<system-reminder>\n<available-deferred-tools>\n${deferredToolList}\n</available-deferred-tools>\nIMPORTANT: The tools listed above are deferred-loading — they are NOT in your tool list. To use them, you MUST first discover a tool via SearchExtraTools, then invoke it with ExecuteExtraTool.\n\nSearchExtraTools and ExecuteExtraTool are core tools already in your tool list right now — call them directly, do NOT use Bash/Glob to find them.\n\nSteps:\n1. SearchExtraTools({"query": "select:<tool_name>"}) — discover the tool and its schema\n2. ExecuteExtraTool({"tool_name": "<name>", "params": {...}}) — invoke it with correct parameters\n</system-reminder>`,
             isMeta: true,
           }),
+          ...messagesForAPI,
         ]
       }
     }
   }
 
-  // Chrome tool-search instructions: when the delta attachment is enabled,
-  // these are carried as a client-side block in mcp_instructions_delta
-  // (attachments.ts) instead of here. This per-request sys-prompt append
-  // busts the prompt cache when chrome connects late.
+  // Chrome 工具搜索指令：当 delta 附件启用时，这些指令以客户端块的形式放在
+  // mcp_instructions_delta（attachments.ts）中，而不是这里。此处的按请求 sys-prompt
+  // append 会在 chrome 较晚连接时使 prompt cache 失效。
   const hasChromeTools = filteredTools.some(t =>
     isToolFromMcpServer(t.name, CLAUDE_IN_CHROME_MCP_SERVER_NAME),
   )
