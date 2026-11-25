@@ -38,6 +38,7 @@ import {
   isBuiltInAgent,
   parseAgentsFromJson,
 } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import { resolveAgentTools } from '@claude-code-best/builtin-tools/tools/AgentTool/agentToolUtils.js'
 import type { Message, NormalizedUserMessage } from 'src/types/message.js'
 import type { QueuedCommand } from 'src/types/textInputTypes.js'
 import {
@@ -1496,6 +1497,17 @@ function runHeadlessStreaming(
     configs: {},
   }
 
+  // 解析主线程的 agent 定义，用于非交互模式的工具裁剪。
+  // main.tsx 已经为 --agent 初始路径应用了 systemPrompt/model/initialPrompt，
+  // 但工具裁剪（frontmatter 里的 tools/disallowedTools）在这里做——交互模式
+  // 是在 REPL.tsx 里用 resolveAgentTools 完成的。getMainThreadAgentType()
+  // 覆盖了三种入口：命令行 --agent、settings 里的 agent、以及恢复会话的
+  // agent（sessionRestore）。
+  const mainAgentType = options.agent ?? getMainThreadAgentType()
+  const mainThreadAgentDefinition = mainAgentType
+    ? agents.find(a => a.agentType === mainAgentType)
+    : undefined
+
   // Shared tool assembly for ask() and the get_context_usage control request.
   // Closes over the mutable sdkTools/dynamicMcpState bindings so both call
   // sites see late-connecting servers.
@@ -1516,6 +1528,15 @@ function runHeadlessStreaming(
       allTools = allTools.filter(
         tool => !toolMatchesName(tool, options.permissionPromptToolName!),
       )
+    }
+    // 应用主线程 agent 的 tools/disallowedTools，让非交互会话也遵守 agent 的
+    // 工具白名单。isMainThread=true 会跳过子代理的禁用规则（和 REPL.tsx 一致）；
+    // SyntheticOutputTool 在这之后才加入，因此不受 agent 过滤影响。
+    if (mainThreadAgentDefinition) {
+      allTools = [
+        ...resolveAgentTools(mainThreadAgentDefinition, allTools, false, true)
+          .resolvedTools,
+      ]
     }
     const initJsonSchema = getInitJsonSchema()
     if (initJsonSchema && !options.jsonSchema) {

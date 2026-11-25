@@ -269,6 +269,7 @@ import debugToolCall from './commands/debug-tool-call/index.js'
 import { getSettingSourceName } from './utils/settings/constants.js'
 import {
   type Command,
+  type LocalCommandCall,
   getCommandName,
   isCommandEnabled,
 } from './types/command.js'
@@ -541,21 +542,68 @@ export function meetsAvailabilityRequirement(cmd: Command): boolean {
 }
 
 /**
- * Loads all command sources (skills, plugins, workflows). Memoized by cwd
- * because loading is expensive (disk I/O, dynamic imports).
+ * 为自定义 agent（`.claude/agents/*.md`、插件 agent、settings agent）生成
+ * slash 命令。每个自定义 agent 会成为一条 `/agent名` 命令，一步切换到该
+ * agent，无需先 `/agent` 再选择。
+ *
+ * 这里用动态 import 避免循环依赖：AgentTool 技术栈
+ * （loadAgentsDir -> agentToolUtils -> runAgent）反向依赖 commands.ts，
+ * 所以不能在模块顶层静态 import loadAgentsDir。
+ */
+async function getAgentSlashCommands(cwd: string): Promise<Command[]> {
+  const {
+    getAgentDefinitionsWithOverrides,
+    getActiveAgentsFromList,
+    isBuiltInAgent,
+  } = await import(
+    '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+  )
+
+  const { allAgents } = await getAgentDefinitionsWithOverrides(cwd)
+  const activeAgents = getActiveAgentsFromList(allAgents)
+
+  // 只注册自定义 agent（跳过 plan/explore 等内置 agent）。内置 agent 是给
+  // 子代理工具用的，不是主线程身份，且它们的 prompt 需要 toolUseContext，
+  // slash 命令无法提供。
+  return activeAgents
+    .filter(agent => !isBuiltInAgent(agent))
+    .map(agent => ({
+      type: 'local' as const,
+      name: agent.agentType,
+      description: agent.whenToUse,
+      supportsNonInteractive: false,
+      // 禁止模型自己调用：切换主线程身份是用户动作，模型用子代理走的是
+      // AgentTool，而不是 slash 命令。
+      disableModelInvocation: true,
+      load: async () => {
+        const { switchToAgent } = await import('./agentMode/switchAgent.js')
+        return {
+          // 在闭包里捕获 agent 名，让 `/hello-agent` 一步切换，
+          // 效果和旧的 `/agent hello-agent` 一致。
+          call: (_args => switchToAgent(agent.agentType)) as LocalCommandCall,
+        }
+      },
+    }))
+}
+
+/**
+ * 加载所有命令来源（skills、插件、workflow、agent）。按 cwd 做 memoize，
+ * 因为加载开销大（磁盘 I/O、动态 import）。
  */
 const loadAllCommands = memoize(async (cwd: string): Promise<Command[]> => {
   const [
     { skillDirCommands, pluginSkills, bundledSkills, builtinPluginSkills },
     pluginCommands,
     workflowCommands,
+    agentCommands,
   ] = await Promise.all([
     getSkills(cwd),
     getPluginCommands(),
     getWorkflowCommands ? getWorkflowCommands(cwd) : Promise.resolve([]),
+    getAgentSlashCommands(cwd),
   ])
 
-  return [
+  const allCommands = [
     ...bundledSkills,
     ...builtinPluginSkills,
     ...skillDirCommands,
@@ -563,6 +611,14 @@ const loadAllCommands = memoize(async (cwd: string): Promise<Command[]> => {
     ...(pluginCommands as Command[]),
     ...pluginSkills,
     ...COMMANDS(),
+  ]
+
+  // agent 命令排在最后，并跳过与已有命令重名的项，这样内置/skill/插件
+  // 命令在名字冲突时始终优先。
+  const existingNames = new Set(allCommands.map(c => c.name))
+  return [
+    ...allCommands,
+    ...agentCommands.filter(c => !existingNames.has(c.name)),
   ]
 })
 

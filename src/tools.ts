@@ -393,6 +393,11 @@ export function assembleToolPool(
   // Filter out MCP tools that are in the deny list
   const allowedMcpTools = filterToolsByDenyRules(mcpTools, permissionContext)
 
+  // 应用 agent 级别的工具过滤
+  const { filterToolsForActiveAgent } = require('./agentMode/agentMode.js')
+  const agentFilteredBuiltIn = filterToolsForActiveAgent(builtInTools)
+  const agentFilteredMcp = filterToolsForActiveAgent(allowedMcpTools)
+
   // Sort each partition for prompt-cache stability, keeping built-ins as a
   // contiguous prefix. The server's claude_code_system_cache_policy places a
   // global cache breakpoint after the last prefix-matched built-in tool; a flat
@@ -403,7 +408,9 @@ export function assembleToolPool(
   // readonly so copy-then-sort; allowedMcpTools is a fresh .filter() result.
   const byName = (a: Tool, b: Tool) => a.name.localeCompare(b.name)
   return uniqBy(
-    [...builtInTools].sort(byName).concat(allowedMcpTools.sort(byName)),
+    [...agentFilteredBuiltIn]
+      .sort(byName)
+      .concat(agentFilteredMcp.sort(byName)),
     'name',
   )
 }
